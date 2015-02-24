@@ -16,18 +16,6 @@
   "The 'type' part of this REST API's media type."
   "application")
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Custom headers and cookies
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;(def hdr-auth-token "pe-rest-auth-token")
-;(def hdr-error-mask "pe-rest-error-mask")
-
-;(def hdr-apptxn-id "peapptxn-id")
-
-;(def hdr-useragent-device-make "pe-rest-useragent-device-make")
-;(def hdr-useragent-device-os "pe-rest-useragent-device-os")
-;(def hdr-useragent-device-os-version "pe-rest-useragent-device-os-version")
-
 (def supported-char-sets
   "The supported character set names."
   char-sets-names)

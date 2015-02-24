@@ -504,18 +504,13 @@
     (:entity-already-exists ctx) (-> (ring-response {:status 403})
                                      (assoc-err-mask ctx :error-mask hdr-error-mask))
     :else (ring-response
-           (merge
-            {}
-            (when-let [status (:status ctx)]
-              {:status status})
-            {:headers
-             (merge
-              {}
-              (when-let [location (:location ctx)]
-                {"location" location})
-              (when-let [auth-token (:auth-token ctx)]
-                {hdr-auth-token auth-token})
-              (when (:last-modified ctx)
-                {"last-modified" (:last-modified ctx)}))}
-            (when (:entity ctx)
-              {:body (:entity ctx)})))))
+           (merge {}
+                  (when-let [status (:status ctx)] {:status status})
+                  {:headers (merge {}
+                                   (when-let [location (:location ctx)]
+                                     {"location" location})
+                                   (when-let [auth-token (:auth-token ctx)]
+                                     {hdr-auth-token auth-token})
+                                   (when (:last-modified ctx)
+                                     {"last-modified" (:last-modified ctx)}))}
+                  (when (:entity ctx) {:body (:entity ctx)})))))
