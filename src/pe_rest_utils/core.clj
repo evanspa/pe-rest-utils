@@ -4,7 +4,7 @@
             [pe-core-utils.core :as ucore]
             [datomic.api :refer [q db] :as d]
             [clojure.java.io :as io]
-            [clojure.walk :refer [postwalk]]
+            [clojure.walk :refer [postwalk keywordize-keys]]
             [clojure.string :refer [split]]
             [clojure.tools.logging :as log]
             [clojure.data.json :as json]
@@ -13,17 +13,15 @@
   (:import [java.net URL]))
 
 (declare write-res)
+(declare put-or-post-t)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn assoc-err-mask [ring-resp-map ctx ctx-keyword]
+(defn assoc-err-mask [ring-resp-map ctx ctx-keyword hdr-error-mask]
   (assoc-in ring-resp-map
-            [:response :headers meta/hdr-error-mask]
+            [:response :headers hdr-error-mask]
             (str (ctx-keyword ctx))))
-
-(defn base-url->url [base-url absolute-path]
-  (format "%s%s" base-url absolute-path))
 
 (defn content-type
   "Returns a content type string of the form: type/subtype-vXXX;charset=XXX"
@@ -33,28 +31,23 @@
   ([mt-type mt-subtype version]
    (format "%s/%s-v%s" mt-type mt-subtype version)))
 
-(defn link
-  [rel base-url path mt-subtype version]
-  [rel {:href (base-url->url base-url path)
+(defn make-abs-link-href
+  [base-url abs-path]
+  (format "%s%s" base-url abs-path))
+
+(defn make-abs-link
+  [version rel mt-subtype base-url abs-path]
+  [rel {:href (make-abs-link-href base-url abs-path)
         :type (content-type meta/mt-type mt-subtype version)}])
 
-(defn v001-link
-  [rel base-url path mt-subtype]
-  (link rel base-url path mt-subtype "0.0.1"))
+(defn make-abs-entity-link-href
+  [base-url entity-uri entid]
+  (format "%s%s/%s" base-url entity-uri entid))
 
-(defn entity-v001-sublink
-  [base-url parent-pathcomp parent-entid rel pathcomp mt-subtype]
-  (v001-link rel
-             base-url
-             (format "%s/%s/%s" parent-pathcomp parent-entid pathcomp)
-             mt-subtype))
-
-(defn entity-v001-subsublink
-  [base-url parent-pathcomp parent-entid entity-entid rel pathcomp mt-subtype]
-  (v001-link rel
-             base-url
-             (format "%s/%s/%s/%s" parent-pathcomp parent-entid pathcomp entity-entid)
-             mt-subtype))
+(defn make-abs-entity-link
+  [version rel mt-subtype base-url entity-uri entid]
+  [rel {:href (make-abs-entity-link-href base-url entity-uri entid)
+        :type (content-type meta/mt-type mt-subtype version)}])
 
 (defn link-href
   [[_ {href :href}]]
@@ -89,12 +82,8 @@
          (re-seq
           #"(\w*)/([\w.]*)(-v(\d.\d.\d))?(\+(\w*))?(;charset=([\w-]*))?"
           media-type))]
-    {:type type
-     :subtype subtype
-     :bare-mediatype (format "%s/%s" type subtype)
-     :version version
-     :format-ind format-ind
-     :charset charset-name}))
+    {:type type :subtype subtype :bare-mediatype (format "%s/%s" type subtype)
+     :version version :format-ind format-ind :charset charset-name}))
 
 (defn is-known-content-type?
   "Returns a vector of 2 elements; the first indicates if the content-type
@@ -195,31 +184,42 @@
     (-> (json/read-str content-str)
         (ucore/rfc7231str-dates->instants))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; HTTP Handlers
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn handle-post!
+(defn put-or-post-invoker
   [ctx
+   method
    conn
    partition
+   hdr-apptxn-id
+   hdr-useragent-device-make
+   hdr-useragent-device-os
+   hdr-useragent-device-os-version
+   base-url          ; e.g., https://api.example.com:4040
+   entity-uri-prefix ; e.g., /fp/
+   entity-uri        ; e.g., /fp/users/191491
    embedded-resources-fn
    links-fn
-   base-url
-   parent-entids
-   entity-entid
-   apptxn-usecase
-   apptxnlog-usecase-event-proc-started
-   post!-fn
-   record-apptxn-async-fn
-   scheme
-   scheme-param-name]
-  (when apptxn-usecase
-    (record-apptxn-async-fn ctx
-                            conn
-                            partition
-                            apptxn-usecase
-                            apptxnlog-usecase-event-proc-started))
-  (let [{{:keys [media-type lang charset]} :representation} ctx
+   entids
+   validator-fn
+   any-issues-bit
+   body-data-in-transform-fn
+   body-data-out-transform-fn
+   existing-entity-fns
+   &
+   more]
+  (let [saveentity-entity-already-exists-bit (nth more 0)
+        save-new-entity-txnmap-fn (nth more 1)
+        save-entity-txnmap-fn (nth more 2)
+        hdr-establish-session (nth more 3)
+        make-session-fn (nth more 4)
+        post-as-do-fn (nth more 5)
+        apptxn-usecase (nth more 6)
+        apptxnlog-proc-started-usecase-event (nth more 7)
+        apptxnlog-proc-done-success-usecase-event (nth more 8)
+        apptxnlog-proc-done-err-occurred-usecase-event (nth more 9)
+        known-entity-attr (nth more 10)
+        record-apptxn-async-fn (nth more 11)
+        apptxnlog-txn-fn (nth more 12)
+        {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
         accept-mt media-type
@@ -228,262 +228,281 @@
         content-type (get-in ctx [:request :headers "content-type"])
         content-lang (get-in ctx [:request :headers "content-language"])
         parsed-content-type (parse-media-type content-type)
-        content-type-charset-name (:charset parsed-content-type)]
-    (let [[_ _ auth-token] (parse-auth-header (get-in ctx [:request :headers "authorization"])
-                                              scheme
-                                              scheme-param-name)]
+        content-type-charset-name (:charset parsed-content-type)
+        version (:version parsed-content-type)
+        body (get-in ctx [:request :body])
+        accept-charset (get meta/char-sets accept-charset-name)
+        content-type-charset (get meta/char-sets content-type-charset-name)
+        body-data (read-res parsed-content-type body content-type-charset)
+        body-data (keywordize-keys body-data)]
+    (put-or-post-t version
+                   body-data
+                   accept-format-ind
+                   accept-charset
+                   accept-lang
+                   ctx
+                   method
+                   conn
+                   partition
+                   hdr-apptxn-id
+                   hdr-useragent-device-make
+                   hdr-useragent-device-os
+                   hdr-useragent-device-os-version
+                   base-url
+                   entity-uri-prefix
+                   entity-uri
+                   embedded-resources-fn
+                   links-fn
+                   entids
+                   validator-fn
+                   any-issues-bit
+                   body-data-in-transform-fn
+                   body-data-out-transform-fn
+                   existing-entity-fns
+                   saveentity-entity-already-exists-bit
+                   save-new-entity-txnmap-fn
+                   save-entity-txnmap-fn
+                   hdr-establish-session
+                   make-session-fn
+                   post-as-do-fn
+                   apptxn-usecase
+                   apptxnlog-proc-started-usecase-event
+                   apptxnlog-proc-done-success-usecase-event
+                   apptxnlog-proc-done-err-occurred-usecase-event
+                   known-entity-attr
+                   record-apptxn-async-fn
+                   apptxnlog-txn-fn)))
 
-      (post!-fn accept-format-ind
-                accept-charset-name
-                accept-lang
-                content-type-charset-name
-                content-lang
-                parsed-content-type
-                ctx
-                conn
-                partition
-                embedded-resources-fn
-                links-fn
-                base-url
-                auth-token
-                parent-entids
-                entity-entid))))
-
-(defn handle-put!
-  [ctx
-   conn
-   partition
-   embedded-resources-fn
-   links-fn
-   base-url
-   parent-entids
-   entity-entid
-   apptxn-usecase
-   apptxnlog-usecase-event-proc-started
-   put!-fn
-   record-apptxn-async-fn
-   scheme
-   scheme-param-name]
-  (when apptxn-usecase
-    (record-apptxn-async-fn ctx
-                            conn
-                            partition
-                            apptxn-usecase
-                            apptxnlog-usecase-event-proc-started))
-  (let [{{:keys [media-type lang charset]} :representation} ctx
-        accept-charset-name charset
-        accept-lang lang
-        accept-mt media-type
-        parsed-accept-mt (parse-media-type accept-mt)
-        accept-format-ind (:format-ind parsed-accept-mt)
-        content-type (get-in ctx [:request :headers "content-type"])
-        content-lang (get-in ctx [:request :headers "content-language"])
-        parsed-content-type (parse-media-type content-type)
-        content-type-charset-name (:charset parsed-content-type)]
-    (let [[_ _ auth-token] (parse-auth-header (get-in ctx [:request :headers "authorization"])
-                                              scheme
-                                              scheme-param-name)]
-      (put!-fn accept-format-ind
-               accept-charset-name
-               accept-lang
-               content-type-charset-name
-               content-lang
-               parsed-content-type
-               ctx
-               conn
-               partition
-               embedded-resources-fn
-               links-fn
-               base-url
-               auth-token
-               parent-entids
-               entity-entid))))
-
-(defn post!-t
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Templates
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn put-or-post-t
   [version
    body-data
    accept-format-ind
    accept-charset
    accept-lang
-   parsed-content-type
    ctx
+   method
    conn
    partition
+   hdr-apptxn-id
+   hdr-useragent-device-make
+   hdr-useragent-device-os
+   hdr-useragent-device-os-version
+   base-url
+   entity-uri-prefix
+   entity-uri
    embedded-resources-fn
    links-fn
-   base-url
-   auth-token
-   parent-entids
-   entity-entid
-   validator-fn
-   any-issues-bit
-   body-data-in-transform-fn
-   body-data-out-transform-fn
-   name-extractor-fn
+   entids
    &
    more]
-  (let [existing-entities-by-name-fn (nth more 0)
-        saveentity-entity-already-exists-bit (nth more 0)
-        save-new-entity-txnmap-fn (nth more 2)
-        apptxn-usecase (nth more 3)
-        apptxnlog-proc-done-success-usecase-event (nth more 4)
-        apptxnlog-proc-done-err-occurred-usecase-event (nth more 5)
-        known-entity-attr (nth more 6)
-        location-fn (nth more 7)
-        record-apptxn-async-fn (nth more 8)
-        apptxnlog-txn-fn (nth more 9)
-        validation-mask (if validator-fn (validator-fn body-data) 0)
-        apptxnlogger (partial record-apptxn-async-fn ctx conn partition apptxn-usecase)]
+  (let [validator-fn (nth more 0)
+        any-issues-bit (nth more 1)
+        body-data-in-transform-fn (nth more 2)
+        body-data-out-transform-fn (nth more 3)
+        existing-entity-fns (nth more 4)
+        saveentity-entity-already-exists-bit (nth more 5)
+        save-new-entity-txnmap-fn (nth more 6)
+        save-entity-txnmap-fn (nth more 7)
+        hdr-establish-session (nth more 8)
+        make-session-fn (nth more 9)
+        post-as-do-fn (nth more 10)
+        apptxn-usecase (nth more 11)
+        apptxnlog-proc-started-usecase-event (nth more 12)
+        apptxnlog-proc-done-success-usecase-event (nth more 13)
+        apptxnlog-proc-done-err-occurred-usecase-event (nth more 14)
+        known-entity-attr (nth more 15)
+        apptxn-async-logger-fn (nth more 16)
+        make-apptxn-fn (nth more 17)
+        validation-mask (if validator-fn (validator-fn version body-data) 0)
+        apptxn-maker (partial make-apptxn-fn
+                              version
+                              ctx
+                              conn
+                              partition
+                              hdr-apptxn-id
+                              hdr-useragent-device-make
+                              hdr-useragent-device-os
+                              hdr-useragent-device-os-version
+                              apptxn-usecase)
+        async-apptxnlogger (partial apptxn-async-logger-fn
+                                    version
+                                    ctx
+                                    conn
+                                    partition
+                                    hdr-apptxn-id
+                                    hdr-useragent-device-make
+                                    hdr-useragent-device-os
+                                    hdr-useragent-device-os-version
+                                    apptxn-usecase)]
     (try
+      (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-started-usecase-event))
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
         {:unprocessable-entity true
          :error-mask validation-mask}
-        (let [transformed-body-data (body-data-in-transform-fn body-data)
-              name (when name-extractor-fn (name-extractor-fn transformed-body-data))]
-          (let [existing-entities (when existing-entities-by-name-fn (existing-entities-by-name-fn conn entity-entid name))
-                content-type-partial #(content-type meta/mt-type % version)]
-            (if (> (count existing-entities) 0)
-              {:entity-already-exists true
-               :error-mask (bit-or saveentity-entity-already-exists-bit
-                                      any-issues-bit)}
-              (let [entity-txn-or-txnmap (save-new-entity-txnmap-fn conn partition entity-entid transformed-body-data)]
-                (if (vector? entity-txn-or-txnmap)
-                  (let [entity-txn entity-txn-or-txnmap]  ; admin or similar case (e.g., saving app-txn set)
-                    @(d/transact conn entity-txn)
-                    {})
-                  (let [entity-txnmap entity-txn-or-txnmap
-                        newentity-tempid (:db/id entity-txn-or-txnmap) ; usual case
-                        apptxnlog-txn (when apptxn-usecase
-                                        (apptxnlog-txn-fn ctx
-                                                          conn
-                                                          partition
-                                                          apptxn-usecase
-                                                          apptxnlog-proc-done-success-usecase-event))
-                        tx @(d/transact conn (if apptxnlog-txn
-                                               (conj apptxnlog-txn entity-txnmap)
-                                               (conj [] entity-txnmap)))
-                        saved-entity-entid (d/resolve-tempid (d/db conn) (:tempids tx) newentity-tempid)
-                        entity-txn-time (last-modified conn saved-entity-entid known-entity-attr)
-                        entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
-                        body-data (body-data-out-transform-fn body-data)
-                        links-fn-args (conj base-url
-                                            version
-                                            parent-entids
-                                            entity-entid
-                                            saved-entity-entid)
-                        saved-entity (if links-fn
-                                       (assoc body-data
-                                              :_links
-                                              (apply links-fn links-fn-args))
-                                       body-data)
-                        saved-entity (if embedded-resources-fn
-                                       (let [embedded-resources-fn-args (conj conn
-                                                                              version
-                                                                              accept-format-ind
-                                                                              parent-entids
-                                                                              entity-entid
-                                                                              saved-entity-entid)]
-                                         (assoc saved-entity
-                                                :_embedded
-                                                (apply embedded-resources-fn embedded-resources-fn-args)))
-                                       saved-entity)]
-                    (merge (when location-fn {:location (link-href (apply location-fn links-fn-args))})
-                           {:last-modified entity-txn-time-str
-                            :saved-entity (write-res saved-entity accept-format-ind accept-charset)
-                            :auth-token auth-token}))))))))
-      (catch Exception e
-        (log/error e "Exception caught")
-        (apptxnlogger apptxnlog-proc-done-err-occurred-usecase-event
-                      nil
-                      (ucore/throwable->str e))
-        {:err e}))))
-
-(defn put-t
-  [version
-   body-data
-   accept-format-ind
-   accept-charset
-   accept-lang
-   parsed-content-type
-   ctx
-   conn
-   partition
-   embedded-resources-fn
-   links-fn
-   base-url
-   auth-token
-   parent-entids
-   entity-entid
-   validator-fn
-   any-issues-bit
-   body-data-in-transform-fn
-   body-data-out-transform-fn
-   name-extractor-fn
-   &
-   more]
-  (let [save-entity-txnmap-fn (nth more 0)
-        apptxn-usecase (nth more 1)
-        apptxnlog-proc-done-success-usecase-event (nth more 2)
-        apptxnlog-proc-done-err-occurred-usecase-event (nth more 3)
-        known-entity-attr (nth more 4)
-        assoc-links-fn (nth more 5)
-        location-fn (nth more 6)
-        record-apptxn-async-fn (nth more 7)
-        apptxnlog-txn-fn (nth more 8)
-        validation-mask (if validator-fn (validator-fn body-data) 0)
-        apptxnlogger (partial record-apptxn-async-fn ctx conn partition apptxn-usecase)]
-    (try
-      (if (pos? (bit-and validation-mask any-issues-bit))
-        {:unprocessable-entity true
-         :error-mask validation-mask}
-        (let [transformed-body-data (body-data-in-transform-fn body-data)
-              name (when name-extractor-fn (name-extractor-fn transformed-body-data))]
-          (let [content-type-partial #(content-type meta/mt-type % version)]
-            (let [entity-txnmap (save-entity-txnmap-fn entity-entid entity-entid transformed-body-data)
-                  apptxnlog-txn (apptxnlog-txn-fn ctx
-                                                  conn
-                                                  partition
-                                                  apptxn-usecase
-                                                  apptxnlog-proc-done-success-usecase-event)
-                  tx @(d/transact conn (conj apptxnlog-txn entity-txnmap))
-                  entity-txn-time (last-modified conn entity-entid known-entity-attr)
-                  entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
-                  body-data (body-data-out-transform-fn body-data)
-                  links-fn-args (conj base-url version parent-entids entity-entid)
-                  saved-entity (if links-fn
-                                 (assoc body-data
+        (let [transformed-body-data (body-data-in-transform-fn version body-data)
+              merge-links-fn (fn [saved-entity saved-entity-entid]
+                               (if links-fn
+                                 (assoc saved-entity
                                         :_links
-                                        (apply links-fn links-fn-args))
-                                 body-data)
-                  saved-entity (if embedded-resources-fn
-                                 (let [embedded-resources-fn-args (conj conn
-                                                                        version
-                                                                        accept-format-ind
-                                                                        parent-entids
-                                                                        entity-entid)]
-                                   (assoc saved-entity
-                                          :_embedded
-                                          (apply embedded-resources-fn embedded-resources-fn-args)))
-                                 saved-entity)]
-              (merge (when location-fn {:location (link-href (apply location-fn links-fn-args))})
-                     {:last-modified entity-txn-time-str
-                      :saved-entity (write-res saved-entity accept-format-ind accept-charset)
-                      :auth-token auth-token})))))
+                                        (links-fn version
+                                                  base-url
+                                                  entity-uri-prefix
+                                                  entity-uri
+                                                  saved-entity-entid))
+                                 saved-entity))
+              merge-embedded-fn (fn [saved-entity saved-entity-entid]
+                                  (if embedded-resources-fn
+                                    (assoc saved-entity
+                                           :_embedded
+                                           (embedded-resources-fn version
+                                                                  base-url
+                                                                  entity-uri-prefix
+                                                                  entity-uri
+                                                                  conn
+                                                                  accept-format-ind
+                                                                  saved-entity-entid))
+                                    saved-entity))]
+          (letfn [(post-as-create-t [f]
+                    (let [does-already-exist (when existing-entity-fns
+                                               (reduce (fn [does-already-exist
+                                                            [name-extraction-fn
+                                                             get-entities-by-name-fn]]
+                                                         (or does-already-exist
+                                                             (let [name (name-extraction-fn version transformed-body-data)
+                                                                   args (flatten (conj []
+                                                                                       version
+                                                                                       conn
+                                                                                       entids
+                                                                                       name))
+                                                                   entities (apply get-entities-by-name-fn args)]
+                                                               (> (count entities) 0))))
+                                                       false
+                                                       existing-entity-fns))]
+                      (if does-already-exist
+                        {:entity-already-exists true
+                         :error-mask (bit-or saveentity-entity-already-exists-bit
+                                             any-issues-bit)}
+                        (let [save-new-entity-txnmap-fn-args (flatten (conj []
+                                                                            version
+                                                                            conn
+                                                                            partition
+                                                                            entids
+                                                                            transformed-body-data))
+                              entity-txn-or-txnmap (apply save-new-entity-txnmap-fn save-new-entity-txnmap-fn-args)
+                              newentity-tempid (if (vector? entity-txn-or-txnmap)
+                                                 (:db/id (first entity-txn-or-txnmap))
+                                                 (:db/id entity-txn-or-txnmap))
+                              {{{est-session? hdr-establish-session} :headers} :request} ctx
+                              [token newauthtoken-txnmap] (when est-session?
+                                                            (make-session-fn version
+                                                                             partition
+                                                                             newentity-tempid
+                                                                             nil))
+                              apptxnlog-txn (when apptxn-usecase
+                                              (apptxn-maker apptxnlog-proc-done-success-usecase-event))
+                              txn-maker-fn (fn [apptxnlog-log]
+                                             (remove nil?
+                                                     (if apptxnlog-log
+                                                       (if (vector? entity-txn-or-txnmap)
+                                                         (conj (concat apptxnlog-txn entity-txn-or-txnmap) newauthtoken-txnmap)
+                                                         (conj apptxnlog-txn entity-txn-or-txnmap newauthtoken-txnmap))
+                                                       (if (vector? entity-txn-or-txnmap)
+                                                         (conj entity-txn-or-txnmap newauthtoken-txnmap)
+                                                         (conj [] entity-txn-or-txnmap newauthtoken-txnmap)))))]
+                          (merge (if est-session?
+                                   {:auth-token token}
+                                   (when (:auth-token ctx)
+                                     {:auth-token (:auth-token ctx)}))
+                                 (f txn-maker-fn apptxnlog-txn entity-txn-or-txnmap))))))
+                  (post-as-create []
+                    (post-as-create-t
+                     (fn [txn-maker-fn apptxnlog-txn entity-txn-or-txnmap]
+                       (let [newentity-tempid (if (vector? entity-txn-or-txnmap)
+                                                (:db/id (first entity-txn-or-txnmap))
+                                                (:db/id entity-txn-or-txnmap))
+                             tx @(d/transact conn (txn-maker-fn apptxnlog-txn))
+                             saved-entity-entid (d/resolve-tempid (d/db conn) (:tempids tx) newentity-tempid)
+                             entity-txn-time (last-modified conn saved-entity-entid known-entity-attr)
+                             entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
+                             body-data (body-data-out-transform-fn version body-data)
+                             saved-entity (merge-links-fn body-data saved-entity-entid)
+                             saved-entity (merge-embedded-fn saved-entity saved-entity-entid)]
+                         (merge {:status 201
+                                 :location (make-abs-entity-link-href base-url entity-uri saved-entity-entid)
+                                 :last-modified entity-txn-time-str
+                                 :entity (write-res saved-entity accept-format-ind accept-charset)})))))
+                  (post-as-create-async []
+                    (post-as-create-t
+                     (fn [txn-maker-fn apptxnlog-txn entity-txn-or-txnmap]
+                       (d/transact conn (txn-maker-fn apptxnlog-txn))
+                       {:status 202})))
+                  (post-as-do []
+                    (let [resp (post-as-do-fn version
+                                              conn
+                                              partition
+                                              base-url
+                                              entity-uri-prefix
+                                              entity-uri
+                                              body-data
+                                              async-apptxnlogger
+                                              merge-embedded-fn
+                                              merge-links-fn)]
+                      (merge resp
+                             (when-let [body-data (:do-entity resp)]
+                               {:entity (write-res (body-data-out-transform-fn version body-data)
+                                                   accept-format-ind
+                                                   accept-charset)})
+                             (when (:auth-token ctx)
+                               {:auth-token (:auth-token ctx)}))))
+                  (put []
+                    (let [save-entity-txnmap-fn-args (flatten (conj []
+                                                                    version
+                                                                    conn
+                                                                    partition
+                                                                    entids
+                                                                    transformed-body-data))
+                          entity-txnmap (apply save-entity-txnmap-fn save-entity-txnmap-fn-args)
+                          apptxnlog-txn (when apptxn-usecase
+                                          (apptxn-maker apptxnlog-proc-done-success-usecase-event))
+                          tx @(d/transact conn (if apptxnlog-txn
+                                                 (conj apptxnlog-txn entity-txnmap)
+                                                 (conj [] entity-txnmap)))
+                          entity-txn-time (last-modified conn (last entids) known-entity-attr)
+                          entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
+                          body-data (body-data-out-transform-fn body-data)
+                          saved-entity (merge-links-fn body-data (last entids))
+                          saved-entity (merge-embedded-fn saved-entity (last entids))]
+                      (merge {:status 200
+                              :location entity-uri
+                              :last-modified entity-txn-time-str
+                              :entity (write-res saved-entity accept-format-ind accept-charset)}
+                             (when (:auth-token ctx)
+                               {:auth-token (:auth-token ctx)}))))]
+            (cond
+              (= method :post-as-create) (post-as-create)
+              (= method :post-as-create-async) (post-as-create-async)
+              (= method :post-as-do) (post-as-do)
+              (= method :put) (put)))))
       (catch Exception e
         (log/error e "Exception caught")
-        (apptxnlogger apptxnlog-proc-done-err-occurred-usecase-event
-                      nil
-                      (ucore/throwable->str e))
+        (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-err-occurred-usecase-event
+                                           nil
+                                           (ucore/throwable->str e)))
         {:err e}))))
 
 (defn handle-resp
-  [ctx]
+  [ctx
+   hdr-auth-token
+   hdr-error-mask]
   (cond
     (:err ctx) (ring-response {:status 500})
     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                    (assoc-err-mask ctx :error-mask))
+                                    (assoc-err-mask ctx :error-mask hdr-error-mask))
     (:entity-already-exists ctx) (-> (ring-response {:status 403})
-                                     (assoc-err-mask ctx :error-mask))
+                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
     :else (ring-response
            (merge
             {}
@@ -495,10 +514,8 @@
               (when-let [location (:location ctx)]
                 {"location" location})
               (when-let [auth-token (:auth-token ctx)]
-                {meta/hdr-auth-token auth-token})
+                {hdr-auth-token auth-token})
               (when (:last-modified ctx)
-                {"last-modified" (:last-modified ctx)})
-              (when (:auth-token ctx)
-                {meta/hdr-auth-token (:auth-token ctx)}))}
-            (when (:saved-entity ctx)
-              {:body (:saved-entity ctx)})))))
+                {"last-modified" (:last-modified ctx)}))}
+            (when (:entity ctx)
+              {:body (:entity ctx)})))))
