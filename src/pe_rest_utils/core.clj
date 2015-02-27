@@ -374,14 +374,14 @@
                                                             [name-extraction-fn
                                                              get-entities-by-name-fn]]
                                                          (or does-already-exist
-                                                             (let [name (name-extraction-fn version transformed-body-data)
-                                                                   args (flatten (conj []
-                                                                                       version
-                                                                                       conn
-                                                                                       entids
-                                                                                       name))
-                                                                   entities (apply get-entities-by-name-fn args)]
-                                                               (> (count entities) 0))))
+                                                             (when-let [name (name-extraction-fn version transformed-body-data)]
+                                                               (let [args (flatten (conj []
+                                                                                         version
+                                                                                         conn
+                                                                                         entids
+                                                                                         name))
+                                                                     entities (apply get-entities-by-name-fn args)]
+                                                                 (> (count entities) 0)))))
                                                        false
                                                        existing-entity-fns))]
                       (if does-already-exist
