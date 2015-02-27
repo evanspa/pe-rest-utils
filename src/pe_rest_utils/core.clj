@@ -189,6 +189,7 @@
    method
    conn
    partition
+   apptxn-partition
    hdr-apptxn-id
    hdr-useragent-device-make
    hdr-useragent-device-os
@@ -203,22 +204,22 @@
    any-issues-bit
    body-data-in-transform-fn
    body-data-out-transform-fn
-   existing-entity-fns
    &
    more]
-  (let [saveentity-entity-already-exists-bit (nth more 0)
-        save-new-entity-txnmap-fn (nth more 1)
-        save-entity-txnmap-fn (nth more 2)
-        hdr-establish-session (nth more 3)
-        make-session-fn (nth more 4)
-        post-as-do-fn (nth more 5)
-        apptxn-usecase (nth more 6)
-        apptxnlog-proc-started-usecase-event (nth more 7)
-        apptxnlog-proc-done-success-usecase-event (nth more 8)
-        apptxnlog-proc-done-err-occurred-usecase-event (nth more 9)
-        known-entity-attr (nth more 10)
-        record-apptxn-async-fn (nth more 11)
-        apptxnlog-txn-fn (nth more 12)
+  (let [existing-entity-fns (nth more 0)
+        saveentity-entity-already-exists-bit (nth more 1)
+        save-new-entity-txnmap-fn (nth more 2)
+        save-entity-txnmap-fn (nth more 3)
+        hdr-establish-session (nth more 4)
+        make-session-fn (nth more 5)
+        post-as-do-fn (nth more 6)
+        apptxn-usecase (nth more 7)
+        apptxnlog-proc-started-usecase-event (nth more 8)
+        apptxnlog-proc-done-success-usecase-event (nth more 9)
+        apptxnlog-proc-done-err-occurred-usecase-event (nth more 10)
+        known-entity-attr (nth more 11)
+        apptxn-async-logger-fn (nth more 12)
+        make-apptxn-fn (nth more 13)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -244,6 +245,7 @@
                    method
                    conn
                    partition
+                   apptxn-partition
                    hdr-apptxn-id
                    hdr-useragent-device-make
                    hdr-useragent-device-os
@@ -270,8 +272,8 @@
                    apptxnlog-proc-done-success-usecase-event
                    apptxnlog-proc-done-err-occurred-usecase-event
                    known-entity-attr
-                   record-apptxn-async-fn
-                   apptxnlog-txn-fn)))
+                   apptxn-async-logger-fn
+                   make-apptxn-fn)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Templates
@@ -286,6 +288,7 @@
    method
    conn
    partition
+   apptxn-partition
    hdr-apptxn-id
    hdr-useragent-device-make
    hdr-useragent-device-os
@@ -295,33 +298,33 @@
    entity-uri
    embedded-resources-fn
    links-fn
-   entids
    &
    more]
-  (let [validator-fn (nth more 0)
-        any-issues-bit (nth more 1)
-        body-data-in-transform-fn (nth more 2)
-        body-data-out-transform-fn (nth more 3)
-        existing-entity-fns (nth more 4)
-        saveentity-entity-already-exists-bit (nth more 5)
-        save-new-entity-txnmap-fn (nth more 6)
-        save-entity-txnmap-fn (nth more 7)
-        hdr-establish-session (nth more 8)
-        make-session-fn (nth more 9)
-        post-as-do-fn (nth more 10)
-        apptxn-usecase (nth more 11)
-        apptxnlog-proc-started-usecase-event (nth more 12)
-        apptxnlog-proc-done-success-usecase-event (nth more 13)
-        apptxnlog-proc-done-err-occurred-usecase-event (nth more 14)
-        known-entity-attr (nth more 15)
-        apptxn-async-logger-fn (nth more 16)
-        make-apptxn-fn (nth more 17)
+  (let [entids (nth more 0)
+        validator-fn (nth more 1)
+        any-issues-bit (nth more 2)
+        body-data-in-transform-fn (nth more 3)
+        body-data-out-transform-fn (nth more 4)
+        existing-entity-fns (nth more 5)
+        saveentity-entity-already-exists-bit (nth more 6)
+        save-new-entity-txnmap-fn (nth more 7)
+        save-entity-txnmap-fn (nth more 8)
+        hdr-establish-session (nth more 9)
+        make-session-fn (nth more 10)
+        post-as-do-fn (nth more 11)
+        apptxn-usecase (nth more 12)
+        apptxnlog-proc-started-usecase-event (nth more 13)
+        apptxnlog-proc-done-success-usecase-event (nth more 14)
+        apptxnlog-proc-done-err-occurred-usecase-event (nth more 15)
+        known-entity-attr (nth more 16)
+        apptxn-async-logger-fn (nth more 17)
+        make-apptxn-fn (nth more 18)
         validation-mask (if validator-fn (validator-fn version body-data) 0)
         apptxn-maker (partial make-apptxn-fn
                               version
                               ctx
                               conn
-                              partition
+                              apptxn-partition
                               hdr-apptxn-id
                               hdr-useragent-device-make
                               hdr-useragent-device-os
@@ -331,7 +334,7 @@
                                     version
                                     ctx
                                     conn
-                                    partition
+                                    apptxn-partition
                                     hdr-apptxn-id
                                     hdr-useragent-device-make
                                     hdr-useragent-device-os
@@ -472,7 +475,7 @@
                                                  (conj [] entity-txnmap)))
                           entity-txn-time (last-modified conn (last entids) known-entity-attr)
                           entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
-                          body-data (body-data-out-transform-fn body-data)
+                          body-data (body-data-out-transform-fn version body-data)
                           saved-entity (merge-links-fn body-data (last entids))
                           saved-entity (merge-embedded-fn saved-entity (last entids))]
                       (merge {:status 200
