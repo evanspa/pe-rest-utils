@@ -23,7 +23,7 @@
   :codox {:exclude [user]
           :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.1/"
           :src-linenum-anchor-prefix "L"}
-  :profiles {:dev {:source-paths ["dev"]  ;ensures 'user.clj' gets auto-loaded
+  :profiles {:dev {:source-paths ["dev"]
                    :plugins [[cider/cider-nrepl "0.9.0-SNAPSHOT"]]
                    :dependencies [[org.clojure/tools.namespace "0.2.7"]
                                   [org.clojure/java.classpath "0.2.2"]
