@@ -189,9 +189,18 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         (ucore/rfc7231str-dates->instants))))
 
 (defn put-or-post-invoker
-  "Convenience function for handling HTTP PUT or POST methods.  Parameters are as follows:
+  "Convenience function for handling HTTP PUT or POST methods.  Within the
+  context of POST, 3 'types' of POST are supported: (1) POST-as-create, (2)
+  POST-as-create Async, (3) POST-as-do.  The 'POST-as-create' types are your
+  typically resource-creation types.  The former would return a 201 in a success
+  scenario, the latter would return a 202.  The 3rd type, POST-as-do, is for
+  those non-creation use cases that don't reasonably fit well within a different
+  HTTP method.  You might use 'POST-as-do' for performing a login action.
+
+  The parameters are as follows:
+
   ctx - Liberator context.
-  method - The HTTP method (PUT or POST)
+  method - :post-as-create, :post-as-create-async, :post-as-do or :put
   conn - Datomic connection.
   partition - Primary application Datomic partition.
   apptxn-partition - Application transaction logging Datomic partition.
@@ -211,26 +220,29 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   any-issues-bit - Bit used to indicate if there are any issues with the request.
   body-data-in-transform-fn - Function used to transform the request body before starting processing.
   body-data-out-transform-fn - Function used to transform the response before returning it.
-  existing-entity-fns - Function used to test for the existence of the request
+
+  The 'more' arguments are as follows:
+
+  existing-entity-fns (more[0]) - Function used to test for the existence of the request
   entity in the case of POST-as-create requests.  If it evaluates to true, an
   error HTTP response is returned.
-  saveentity-entity-already-exists-bit - The bit to use to indicate if the
+  saveentity-entity-already-exists-bit (more[1]) - The bit to use to indicate if the
   request entity already exists (in the case of POST-as-create).
-  save-new-entity-txnmap-fn - Function to create a new entity (in the case of POST-as-create).
-  save-entity-txnmap-fn - Function to save an existing entity (in the case of PUT).
-  hdr-establish-session - Name of header indicating if a session should be establish.
-  make-session-fn - Function to create a new session.
-  post-as-do-fn - Function to process the request in the case of POST-as-do.
-  apptxn-usecase - Application transaction use case name for this request.
-  apptxnlog-proc-started-usecase-event - Specific application transaction use
+  save-new-entity-txnmap-fn (more[2]) - Function to create a new entity (in the case of POST-as-create).
+  save-entity-txnmap-fn (more[3]) - Function to save an existing entity (in the case of PUT).
+  hdr-establish-session (more[4]) - Name of header indicating if a session should be establish.
+  make-session-fn (more[5]) - Function to create a new session.
+  post-as-do-fn (more[6]) - Function to process the request in the case of POST-as-do.
+  apptxn-usecase (more[7]) - Application transaction use case name for this request.
+  apptxnlog-proc-started-usecase-event (more[8]) - Specific application transaction use
   case 'processing started' event type.
-  apptxnlog-proc-done-success-usecase-event - Specific application transaction
+  apptxnlog-proc-done-success-usecase-event (more[9]) - Specific application transaction
   use case 'processing done, successful' event type.
-  apptxnlog-proc-done-err-occurred-usecase-event - Specific application
+  apptxnlog-proc-done-err-occurred-usecase-event - (more[10]) Specific application
   transaction use case 'processing done, error ocurred' event type.
-  known-entity-attr -  Known Datomic attribute of the request entity.
-  apptxn-async-logger-fn - Function for asynchronously logging application transactions.
-  make-apptxn-fn - Function for creating Datomic transactions for persisting
+  known-entity-attr (more[11]) -  Known Datomic attribute of the request entity.
+  apptxn-async-logger-fn (more[12]) - Function for asynchronously logging application transactions.
+  make-apptxn-fn (more[13]) - Function for creating Datomic transactions for persisting
   application transaction log data."
   [ctx
    method
@@ -326,7 +338,16 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
 ;; Templates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn put-or-post-t
-  "Convenience function for handling HTTP PUT or POST methods.  Parameters are as follows:
+  "Convenience function for handling HTTP PUT or POST methods.  Within the
+  context of POST, 3 'types' of POST are supported: (1) POST-as-create, (2)
+  POST-as-create Async, (3) POST-as-do.  The 'POST-as-create' types are your
+  typically resource-creation types.  The former would return a 201 in a success
+  scenario, the latter would return a 202.  The 3rd type, POST-as-do, is for
+  those non-creation use cases that don't reasonably fit well within a different
+  HTTP method.  You might use 'POST-as-do' for performing a login action.
+
+  The parameters are as follows:
+
   version - The media type version indicator.
   body-data - The request body data.
   accept-format-ind - The accept format indicator (i.e., the format the
@@ -336,7 +357,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   accept-lang - The accept language (i.e., the language to use for
   human-consumable text-content in the response).
   ctx - Liberator context.
-  method - The HTTP method (PUT or POST)
+  method - :post-as-create, :post-as-create-async, :post-as-do or :put
   conn - Datomic connection.
   partition - Primary application Datomic partition.
   apptxn-partition - Application transaction logging Datomic partition.
@@ -351,31 +372,34 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   the '_embedded' slot of the returned resource object.
   links-fn - Function whose return value is used for the value the '_links' slot
   of the returned resource object.
-  entids - The set of entity IDs that appear in the request URI.
-  validator-fn - Predicate function to validate the contents of the request body.
-  any-issues-bit - Bit used to indicate if there are any issues with the request.
-  body-data-in-transform-fn - Function used to transform the request body before starting processing.
-  body-data-out-transform-fn - Function used to transform the response before returning it.
-  existing-entity-fns - Function used to test for the existence of the request
+
+  The 'more' arguments are as follows:
+
+  entids (more[0]) - The set of entity IDs that appear in the request URI.
+  validator-fn (more[1]) - Predicate function to validate the contents of the request body.
+  any-issues-bit (more[2]) - Bit used to indicate if there are any issues with the request.
+  body-data-in-transform-fn (more[3]) - Function used to transform the request body before starting processing.
+  body-data-out-transform-fn (more[4]) - Function used to transform the response before returning it.
+  existing-entity-fns (more[5]) - Function used to test for the existence of the request
   entity in the case of POST-as-create requests.  If it evaluates to true, an
   error HTTP response is returned.
-  saveentity-entity-already-exists-bit - The bit to use to indicate if the
+  saveentity-entity-already-exists-bit (more[6]) - The bit to use to indicate if the
   request entity already exists (in the case of POST-as-create).
-  save-new-entity-txnmap-fn - Function to create a new entity (in the case of POST-as-create).
-  save-entity-txnmap-fn - Function to save an existing entity (in the case of PUT).
-  hdr-establish-session - Name of header indicating if a session should be establish.
-  make-session-fn - Function to create a new session.
-  post-as-do-fn - Function to process the request in the case of POST-as-do.
-  apptxn-usecase - Application transaction use case name for this request.
-  apptxnlog-proc-started-usecase-event - Specific application transaction use
+  save-new-entity-txnmap-fn (more[7]) - Function to create a new entity (in the case of POST-as-create).
+  save-entity-txnmap-fn (more[8]) - Function to save an existing entity (in the case of PUT).
+  hdr-establish-session (more[9]) - Name of header indicating if a session should be establish.
+  make-session-fn (more[10]) - Function to create a new session.
+  post-as-do-fn (more[11]) - Function to process the request in the case of POST-as-do.
+  apptxn-usecase (more[12]) - Application transaction use case name for this request.
+  apptxnlog-proc-started-usecase-event (more[13]) - Specific application transaction use
   case 'processing started' event type.
-  apptxnlog-proc-done-success-usecase-event - Specific application transaction
+  apptxnlog-proc-done-success-usecase-event (more[14]) - Specific application transaction
   use case 'processing done, successful' event type.
-  apptxnlog-proc-done-err-occurred-usecase-event - Specific application
+  apptxnlog-proc-done-err-occurred-usecase-event - (more[15]) Specific application
   transaction use case 'processing done, error ocurred' event type.
-  known-entity-attr -  Known Datomic attribute of the request entity.
-  apptxn-async-logger-fn - Function for asynchronously logging application transactions.
-  make-apptxn-fn - Function for creating Datomic transactions for persisting
+  known-entity-attr (more[16]) -  Known Datomic attribute of the request entity.
+  apptxn-async-logger-fn (more[17]) - Function for asynchronously logging application transactions.
+  make-apptxn-fn (more[18]) - Function for creating Datomic transactions for persisting
   application transaction log data."
   [version
    body-data
