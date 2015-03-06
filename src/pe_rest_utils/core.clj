@@ -1,7 +1,10 @@
 (ns pe-rest-utils.core
+  "A set of functions to simplify the development of (hypermedia) REST services
+  on top of Liberator."
   (:require [liberator.representation :refer [render-map-generic ring-response]]
             [pe-rest-utils.meta :as meta]
             [pe-core-utils.core :as ucore]
+            [pe-datomic-utils.core :as ducore]
             [datomic.api :refer [q db] :as d]
             [clojure.java.io :as io]
             [clojure.walk :refer [postwalk keywordize-keys]]
@@ -18,7 +21,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn assoc-err-mask [ring-resp-map ctx ctx-keyword hdr-error-mask]
+(defn assoc-err-mask
+  "Associates hdr-error-mask as a response header in the Ring response map,
+  ring-resp-map.  The value used is entry found in ctx keyed on ctx-keyword."
+  [ring-resp-map ctx ctx-keyword hdr-error-mask]
   (assoc-in ring-resp-map
             [:response :headers hdr-error-mask]
             (str (ctx-keyword ctx))))
@@ -32,34 +38,34 @@
    (format "%s/%s-v%s" mt-type mt-subtype version)))
 
 (defn make-abs-link-href
+  "Returns an absolute URL string from base-url and abs-path."
   [base-url abs-path]
   (format "%s%s" base-url abs-path))
 
 (defn make-abs-link
+  "Returns a vector where the first element is rel, and the second element is
+map with keys :href and :type.  The value at :href is the absolute URL
+constructed from base-url and abs-path, and :type is a media type string
+constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   [version rel mt-subtype base-url abs-path]
   [rel {:href (make-abs-link-href base-url abs-path)
         :type (content-type meta/mt-type mt-subtype version)}])
 
-(defn make-abs-entity-link-href
-  [base-url entity-uri entid]
-  (format "%s%s/%s" base-url entity-uri entid))
-
-(defn make-abs-entity-link
-  [version rel mt-subtype base-url entity-uri entid]
-  [rel {:href (make-abs-entity-link-href base-url entity-uri entid)
-        :type (content-type meta/mt-type mt-subtype version)}])
-
 (defn link-href
+  "Returns the absolute URL string part of a link vector (as returned by
+  make-abs-link)."
   [[_ {href :href}]]
   href)
 
 (defn assoc-link
+  "Associates the link vector (as returned by make-abs-link) with m keyed on the
+  relation of the link vector (its first element)."
   [m [rel link-m]]
   (assoc m rel link-m))
 
 (defn enumerate-media-types
   "Returns a seq of HTTP-formated media type strings from the
-   'supported-media-types' var."
+  'supported-media-types' var."
   [mts]
   (for [type (keys mts)
         subtype (keys (get-in mts [type :subtypes]))
@@ -82,15 +88,19 @@
          (re-seq
           #"(\w*)/([\w.]*)(-v(\d.\d.\d))?(\+(\w*))?(;charset=([\w-]*))?"
           media-type))]
-    {:type type :subtype subtype :bare-mediatype (format "%s/%s" type subtype)
-     :version version :format-ind format-ind :charset charset-name}))
+    {:type type
+     :subtype subtype
+     :bare-mediatype (format "%s/%s" type subtype)
+     :version version
+     :format-ind format-ind
+     :charset charset-name}))
 
 (defn is-known-content-type?
   "Returns a vector of 2 elements; the first indicates if the content-type
-   of the entity of the request is known by this REST API, and the second
-   element is the parsed character set of the entity string representation.
-   If the content-type is not supported, then the second element will be
-   nil."
+  of the entity of the request is known by this REST API, and the second
+  element is the parsed character set of the entity string representation.
+  If the content-type is not supported, then the second element will be
+  nil."
   [ctx mts charsets]
   (let [parsed-ct (parse-media-type
                    (get-in ctx [:request :headers "content-type"]))
@@ -100,15 +110,14 @@
                              :format-inds (:format-ind parsed-ct)])))
      {:charset (get charsets charset-name)}]))
 
-(defn merge-links
-  [links-map representation]
-  (merge representation links-map))
-
 (defn media-type
+  "Returns a media type string constructed from the given arguments."
   [mt-type mt-subtype version format-ind]
   (str mt-type "/" mt-subtype "-v" version "+" format-ind))
 
 (defn parse-auth-header
+  "Parses an HTTP 'Authorization' header returning a vector containing the
+  parsed authorization scheme , scheme parameter name and parameter value."
   [authorization scheme scheme-param-name]
   (when authorization
     (let [auth-str-tokens (split authorization #" ")]
@@ -127,18 +136,10 @@
                                                     auth-scheme-param-value)]
                       [auth-scheme auth-scheme-param-name auth-scheme-param-value])))))))))))
 
-(defn last-modified
-  [conn entity-entid known-entity-attr]
-  (ffirst (q '[:find ?tx-time
-               :in $ ?e ?a
-               :where
-               [$ ?e ?a _ ?tx]
-               [$ ?tx :db/txInstant ?tx-time]]
-             (db conn)
-             entity-entid
-             known-entity-attr)))
-
-(defn known-content-type-predicate [supported-media-types]
+(defn known-content-type-predicate
+  "Returns a function suitable to be used for the :known-content-type? slot of a
+  Liberator resource."
+  [supported-media-types]
   (fn [ctx]
     (let [{{method :request-method} :request} ctx]
       (if (or (= method :put)
@@ -153,11 +154,14 @@
 ;; Resource Serializers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmulti read-res
+  "Returns an object by parsing content based on pct (parsed content type) and
+  charset."
   (fn [pct content charset]
     {:format-ind (:format-ind pct)}))
 
 (defmulti write-res
-  "dispatch on format indicator"
+  "Returns a string reprsentation of res based on format-ind (format indicator)
+  and charset."
   (fn [res format-ind charset] format-ind))
 
 (defmethod write-res "edn"
@@ -185,6 +189,49 @@
         (ucore/rfc7231str-dates->instants))))
 
 (defn put-or-post-invoker
+  "Convenience function for handling HTTP PUT or POST methods.  Parameters are as follows:
+  ctx - Liberator context.
+  method - The HTTP method (PUT or POST)
+  conn - Datomic connection.
+  partition - Primary application Datomic partition.
+  apptxn-partition - Application transaction logging Datomic partition.
+  hdr-apptxn-id - Application transaction ID header name.
+  hdr-useragent-device-make - User-agent device make header name.
+  hdr-useragent-device-os - User-agent device operating system header name.
+  hdr-useragent-device-os-version - User-agent device operating system version header name.
+  base-url - The base URL used by the REST API.
+  entity-uri-prefix - The entity URI prefix used by the REST API
+  entity-uri - The URI of the request entity.
+  embedded-resources-fn - Function whose return value is used for the value of
+  the '_embedded' slot of the returned resource object.
+  links-fn - Function whose return value is used for the value the '_links' slot
+  of the returned resource object.
+  entids - The set of entity IDs that appear in the request URI.
+  validator-fn - Predicate function to validate the contents of the request body.
+  any-issues-bit - Bit used to indicate if there are any issues with the request.
+  body-data-in-transform-fn - Function used to transform the request body before starting processing.
+  body-data-out-transform-fn - Function used to transform the response before returning it.
+  existing-entity-fns - Function used to test for the existence of the request
+  entity in the case of POST-as-create requests.  If it evaluates to true, an
+  error HTTP response is returned.
+  saveentity-entity-already-exists-bit - The bit to use to indicate if the
+  request entity already exists (in the case of POST-as-create).
+  save-new-entity-txnmap-fn - Function to create a new entity (in the case of POST-as-create).
+  save-entity-txnmap-fn - Function to save an existing entity (in the case of PUT).
+  hdr-establish-session - Name of header indicating if a session should be establish.
+  make-session-fn - Function to create a new session.
+  post-as-do-fn - Function to process the request in the case of POST-as-do.
+  apptxn-usecase - Application transaction use case name for this request.
+  apptxnlog-proc-started-usecase-event - Specific application transaction use
+  case 'processing started' event type.
+  apptxnlog-proc-done-success-usecase-event - Specific application transaction
+  use case 'processing done, successful' event type.
+  apptxnlog-proc-done-err-occurred-usecase-event - Specific application
+  transaction use case 'processing done, error ocurred' event type.
+  known-entity-attr -  Known Datomic attribute of the request entity.
+  apptxn-async-logger-fn - Function for asynchronously logging application transactions.
+  make-apptxn-fn - Function for creating Datomic transactions for persisting
+  application transaction log data."
   [ctx
    method
    conn
@@ -279,6 +326,57 @@
 ;; Templates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn put-or-post-t
+  "Convenience function for handling HTTP PUT or POST methods.  Parameters are as follows:
+  version - The media type version indicator.
+  body-data - The request body data.
+  accept-format-ind - The accept format indicator (i.e., the format the
+  response should be in).
+  accept-charset - The accept character set (i.e., the character set to encode
+  the textual-response).
+  accept-lang - The accept language (i.e., the language to use for
+  human-consumable text-content in the response).
+  ctx - Liberator context.
+  method - The HTTP method (PUT or POST)
+  conn - Datomic connection.
+  partition - Primary application Datomic partition.
+  apptxn-partition - Application transaction logging Datomic partition.
+  hdr-apptxn-id - Application transaction ID header name.
+  hdr-useragent-device-make - User-agent device make header name.
+  hdr-useragent-device-os - User-agent device operating system header name.
+  hdr-useragent-device-os-version - User-agent device operating system version header name.
+  base-url - The base URL used by the REST API.
+  entity-uri-prefix - The entity URI prefix used by the REST API
+  entity-uri - The URI of the request entity.
+  embedded-resources-fn - Function whose return value is used for the value of
+  the '_embedded' slot of the returned resource object.
+  links-fn - Function whose return value is used for the value the '_links' slot
+  of the returned resource object.
+  entids - The set of entity IDs that appear in the request URI.
+  validator-fn - Predicate function to validate the contents of the request body.
+  any-issues-bit - Bit used to indicate if there are any issues with the request.
+  body-data-in-transform-fn - Function used to transform the request body before starting processing.
+  body-data-out-transform-fn - Function used to transform the response before returning it.
+  existing-entity-fns - Function used to test for the existence of the request
+  entity in the case of POST-as-create requests.  If it evaluates to true, an
+  error HTTP response is returned.
+  saveentity-entity-already-exists-bit - The bit to use to indicate if the
+  request entity already exists (in the case of POST-as-create).
+  save-new-entity-txnmap-fn - Function to create a new entity (in the case of POST-as-create).
+  save-entity-txnmap-fn - Function to save an existing entity (in the case of PUT).
+  hdr-establish-session - Name of header indicating if a session should be establish.
+  make-session-fn - Function to create a new session.
+  post-as-do-fn - Function to process the request in the case of POST-as-do.
+  apptxn-usecase - Application transaction use case name for this request.
+  apptxnlog-proc-started-usecase-event - Specific application transaction use
+  case 'processing started' event type.
+  apptxnlog-proc-done-success-usecase-event - Specific application transaction
+  use case 'processing done, successful' event type.
+  apptxnlog-proc-done-err-occurred-usecase-event - Specific application
+  transaction use case 'processing done, error ocurred' event type.
+  known-entity-attr -  Known Datomic attribute of the request entity.
+  apptxn-async-logger-fn - Function for asynchronously logging application transactions.
+  make-apptxn-fn - Function for creating Datomic transactions for persisting
+  application transaction log data."
   [version
    body-data
    accept-format-ind
@@ -428,13 +526,16 @@
                                                 (:db/id entity-txn-or-txnmap))
                              tx @(d/transact conn (txn-maker-fn apptxnlog-txn))
                              saved-entity-entid (d/resolve-tempid (d/db conn) (:tempids tx) newentity-tempid)
-                             entity-txn-time (last-modified conn saved-entity-entid known-entity-attr)
+                             entity-txn-time (ducore/txn-time conn saved-entity-entid known-entity-attr)
                              entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
                              body-data (body-data-out-transform-fn version body-data)
                              saved-entity (merge-links-fn body-data saved-entity-entid)
                              saved-entity (merge-embedded-fn saved-entity saved-entity-entid)]
                          (merge {:status 201
-                                 :location (make-abs-entity-link-href base-url entity-uri saved-entity-entid)
+                                 :location (make-abs-link-href base-url
+                                                               (str entity-uri
+                                                                    "/"
+                                                                    saved-entity-entid));(make-abs-entity-link-href base-url entity-uri saved-entity-entid)
                                  :last-modified entity-txn-time-str
                                  :entity (write-res saved-entity accept-format-ind accept-charset)})))))
                   (post-as-create-async []
@@ -473,7 +574,7 @@
                           tx @(d/transact conn (if apptxnlog-txn
                                                  (conj apptxnlog-txn entity-txnmap)
                                                  (conj [] entity-txnmap)))
-                          entity-txn-time (last-modified conn (last entids) known-entity-attr)
+                          entity-txn-time (ducore/txn-time conn (last entids) known-entity-attr)
                           entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
                           body-data (body-data-out-transform-fn version body-data)
                           saved-entity (merge-links-fn body-data (last entids))
@@ -497,6 +598,9 @@
         {:err e}))))
 
 (defn handle-resp
+  "Returns a Ring response based on the content of the Liberator context.
+  hdr-auth-token and hdr-error-mark are the names of the authentication token
+  and error mask response headers."
   [ctx
    hdr-auth-token
    hdr-error-mask]

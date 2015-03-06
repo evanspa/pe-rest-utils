@@ -1,4 +1,5 @@
-(ns pe-rest-utils.meta)
+(ns pe-rest-utils.meta
+  "Contains a set of definitions typically used by a REST API.")
 
 (def char-sets
   "The set of character sets (java.nio.charset.Charset
