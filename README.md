@@ -15,5 +15,5 @@ pe-rest-utils is available from Clojars.  Add the following dependency to your
 `project.clj` file:
 
 ```
-[pe-rest-utils "0.0.1"]
+[pe-rest-utils "0.0.2"]
 ```
