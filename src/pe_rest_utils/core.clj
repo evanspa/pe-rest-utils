@@ -621,6 +621,102 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                            (ucore/throwable->str e)))
         {:err e}))))
 
+(defn get-t
+  [version
+   accept-format-ind
+   accept-charset
+   accept-lang
+   ctx
+   conn
+   apptxn-partition
+   hdr-apptxn-id
+   hdr-useragent-device-make
+   hdr-useragent-device-os
+   hdr-useragent-device-os-version
+   base-url
+   entity-uri-prefix
+   entity-uri
+   embedded-resources-fn
+   links-fn
+   &
+   more]
+  (let [entids (nth more 0)
+        any-issues-bit (nth more 1)
+        body-data-out-transform-fn (nth more 2)
+        fetch-fn (nth more 3)
+        apptxn-usecase (nth more 4)
+        apptxnlog-proc-started-usecase-event (nth more 5)
+        apptxnlog-proc-done-success-usecase-event (nth more 6)
+        apptxnlog-proc-done-err-occurred-usecase-event (nth more 7)
+        known-entity-attr (nth more 8)
+        apptxn-async-logger-fn (nth more 9)
+        make-apptxn-fn (nth more 10)
+        apptxn-maker (partial make-apptxn-fn
+                              version
+                              ctx
+                              conn
+                              apptxn-partition
+                              hdr-apptxn-id
+                              hdr-useragent-device-make
+                              hdr-useragent-device-os
+                              hdr-useragent-device-os-version
+                              apptxn-usecase)
+        async-apptxnlogger (partial apptxn-async-logger-fn
+                                    version
+                                    ctx
+                                    conn
+                                    apptxn-partition
+                                    hdr-apptxn-id
+                                    hdr-useragent-device-make
+                                    hdr-useragent-device-os
+                                    hdr-useragent-device-os-version
+                                    apptxn-usecase)]
+    (try
+      (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-started-usecase-event))
+      (let [merge-links-fn (fn [fetched-entity fetched-entity-entid]
+                             (if links-fn
+                               (assoc fetched-entity
+                                      :_links
+                                      (links-fn version
+                                                base-url
+                                                entity-uri-prefix
+                                                entity-uri
+                                                fetched-entity-entid))
+                               fetched-entity))
+            merge-embedded-fn (fn [fetched-entity fetched-entity-entid]
+                                (if embedded-resources-fn
+                                  (assoc fetched-entity
+                                         :_embedded
+                                         (embedded-resources-fn version
+                                                                base-url
+                                                                entity-uri-prefix
+                                                                entity-uri
+                                                                conn
+                                                                accept-format-ind
+                                                                fetched-entity-entid))
+                                  fetched-entity))]
+        (let [resp (fetch-fn version
+                             conn
+                             base-url
+                             entity-uri-prefix
+                             entity-uri
+                             async-apptxnlogger
+                             merge-embedded-fn
+                             merge-links-fn)]
+          (merge resp
+                 (when-let [body-data (:do-entity resp)]
+                   {:entity (write-res (body-data-out-transform-fn version body-data)
+                                       accept-format-ind
+                                       accept-charset)})
+                 (when (:auth-token ctx)
+                   {:auth-token (:auth-token ctx)}))))
+      (catch Exception e
+        (log/error e "Exception caught")
+        (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-err-occurred-usecase-event
+                                                 nil
+                                                 (ucore/throwable->str e)))
+        {:err e}))))
+
 (defn handle-resp
   "Returns a Ring response based on the content of the Liberator context.
   hdr-auth-token and hdr-error-mark are the names of the authentication token
