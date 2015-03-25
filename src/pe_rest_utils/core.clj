@@ -17,6 +17,7 @@
 
 (declare write-res)
 (declare put-or-post-t)
+(declare get-t)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
@@ -334,6 +335,104 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    apptxn-async-logger-fn
                    make-apptxn-fn)))
 
+(defn get-invoker
+  "Convenience function for handling HTTP GET requests.
+
+  The parameters are as follows:
+
+  ctx - Liberator context.
+  conn - Datomic connection.
+  apptxn-partition - Application transaction logging Datomic partition.
+  hdr-apptxn-id - Application transaction ID header name.
+  hdr-useragent-device-make - User-agent device make header name.
+  hdr-useragent-device-os - User-agent device operating system header name.
+  hdr-useragent-device-os-version - User-agent device operating system version header name.
+  base-url - The base URL used by the REST API.
+  entity-uri-prefix - The entity URI prefix used by the REST API
+  entity-uri - The URI of the request entity.
+  embedded-resources-fn - Function whose return value is used for the value of
+  the '_embedded' slot of the returned resource object.
+  links-fn - Function whose return value is used for the value the '_links' slot
+  of the returned resource object.
+
+  The 'more' arguments are as follows:
+
+  entids (more[0]) - The set of entity IDs that appear in the request URI.
+  any-issues-bit (more[1]) - Bit used to indicate if there are any issues with the request.
+  body-data-out-transform-fn (more[2]) - Function used to transform the response before returning it.
+  fetch-fn (more[3]) - The function performing the actual fetching of the entity from the database.
+  apptxn-usecase (more[4]) - Application transaction use case name for this request.
+  apptxnlog-proc-started-usecase-event (more[5]) - Specific application transaction use
+  case 'processing started' event type.
+  apptxnlog-proc-done-success-usecase-event (more[6]) - Specific application transaction
+  use case 'processing done, successful' event type.
+  apptxnlog-proc-done-err-occurred-usecase-event - (more[7]) Specific application
+  transaction use case 'processing done, error ocurred' event type.
+  known-entity-attr (more[8]) -  Known Datomic attribute of the request entity.
+  apptxn-async-logger-fn (more[9]) - Function for asynchronously logging application transactions.
+  make-apptxn-fn (more[10]) - Function for creating Datomic transactions for persisting
+  application transaction log data."
+  [ctx
+   conn
+   apptxn-partition
+   hdr-apptxn-id
+   hdr-useragent-device-make
+   hdr-useragent-device-os
+   hdr-useragent-device-os-version
+   base-url          ; e.g., https://api.example.com:4040
+   entity-uri-prefix ; e.g., /fp/
+   entity-uri        ; e.g., /fp/users/191491
+   embedded-resources-fn
+   links-fn
+   &
+   more]
+  (let [entids (nth more 0)
+        any-issues-bit (nth more 1)
+        body-data-out-transform-fn (nth more 2)
+        fetch-fn (nth more 3)
+        apptxn-usecase (nth more 4)
+        apptxnlog-proc-started-usecase-event (nth more 5)
+        apptxnlog-proc-done-success-usecase-event (nth more 6)
+        apptxnlog-proc-done-err-occurred-usecase-event (nth more 7)
+        known-entity-attr (nth more 8)
+        apptxn-async-logger-fn (nth more 9)
+        make-apptxn-fn (nth more 10)
+        {{:keys [media-type lang charset]} :representation} ctx
+        accept-charset-name charset
+        accept-lang lang
+        accept-mt media-type
+        parsed-accept-mt (parse-media-type accept-mt)
+        version (:version parsed-accept-mt)
+        accept-format-ind (:format-ind parsed-accept-mt)
+        accept-charset (get meta/char-sets accept-charset-name)]
+    (get-t version
+           accept-format-ind
+           accept-charset
+           accept-lang
+           ctx
+           conn
+           apptxn-partition
+           hdr-apptxn-id
+           hdr-useragent-device-make
+           hdr-useragent-device-os
+           hdr-useragent-device-os-version
+           base-url
+           entity-uri-prefix
+           entity-uri
+           embedded-resources-fn
+           links-fn
+           entids
+           any-issues-bit
+           body-data-out-transform-fn
+           fetch-fn
+           apptxn-usecase
+           apptxnlog-proc-started-usecase-event
+           apptxnlog-proc-done-success-usecase-event
+           apptxnlog-proc-done-err-occurred-usecase-event
+           known-entity-attr
+           apptxn-async-logger-fn
+           make-apptxn-fn)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Templates
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -622,6 +721,49 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         {:err e}))))
 
 (defn get-t
+  "Convenience function for handling HTTP GET requests.
+
+  The parameters are as follows:
+
+  version - The media type version indicator.
+  accept-format-ind - The accept format indicator (i.e., the format the
+  response should be in).
+  accept-charset - The accept character set (i.e., the character set to encode
+  the textual-response).
+  accept-lang - The accept language (i.e., the language to use for
+  human-consumable text-content in the response).
+  ctx - Liberator context.
+  conn - Datomic connection.
+  apptxn-partition - Application transaction logging Datomic partition.
+  hdr-apptxn-id - Application transaction ID header name.
+  hdr-useragent-device-make - User-agent device make header name.
+  hdr-useragent-device-os - User-agent device operating system header name.
+  hdr-useragent-device-os-version - User-agent device operating system version header name.
+  base-url - The base URL used by the REST API.
+  entity-uri-prefix - The entity URI prefix used by the REST API
+  entity-uri - The URI of the request entity.
+  embedded-resources-fn - Function whose return value is used for the value of
+  the '_embedded' slot of the returned resource object.
+  links-fn - Function whose return value is used for the value the '_links' slot
+  of the returned resource object.
+
+  The 'more' arguments are as follows:
+
+  entids (more[0]) - The set of entity IDs that appear in the request URI.
+  any-issues-bit (more[1]) - Bit used to indicate if there are any issues with the request.
+  body-data-out-transform-fn (more[2]) - Function used to transform the response before returning it.
+  fetch-fn (more[3]) - The function performing the actual fetching of the entity from the database.
+  apptxn-usecase (more[4]) - Application transaction use case name for this request.
+  apptxnlog-proc-started-usecase-event (more[5]) - Specific application transaction use
+  case 'processing started' event type.
+  apptxnlog-proc-done-success-usecase-event (more[6]) - Specific application transaction
+  use case 'processing done, successful' event type.
+  apptxnlog-proc-done-err-occurred-usecase-event - (more[7]) Specific application
+  transaction use case 'processing done, error ocurred' event type.
+  known-entity-attr (more[8]) -  Known Datomic attribute of the request entity.
+  apptxn-async-logger-fn (more[9]) - Function for asynchronously logging application transactions.
+  make-apptxn-fn (more[10]) - Function for creating Datomic transactions for persisting
+  application transaction log data."
   [version
    accept-format-ind
    accept-charset
@@ -703,8 +845,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                              async-apptxnlogger
                              merge-embedded-fn
                              merge-links-fn)]
+          (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-success-usecase-event))
           (merge resp
-                 (when-let [body-data (:do-entity resp)]
+                 (when-let [body-data (:fetched-entity resp)]
                    {:entity (write-res (body-data-out-transform-fn version body-data)
                                        accept-format-ind
                                        accept-charset)})

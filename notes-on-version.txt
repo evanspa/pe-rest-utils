@@ -1,0 +1,17 @@
+Notes on versioning.  As it stands, most of the important parts of processing an
+HTTP request are handled using multi-methods that dispatch on the concept of a
+version string.  For PUT and POST, the version string is derived from the
+version-part of the Content-Type header value.  The version-part of the Accept
+header is ignored.  For GET, the version string is derived from the version-part
+of the Accept header.  So, when it comes to versioning a REST API, using a
+version-part appended to the end of a media type string may not be the most
+intuitive.  For PUT and POST, it's a bit weird that the Content-Type's
+version-part wins.  Why is that?  Why not the Accept header's version-part?
+What does it even mean if the Accept header's version-part is different than the
+Content-Type's version-part?  So perhaps we lay down some rules for REST APIs:
+
++ For PUT/POST, if a version-part exists on the Content-Type, then the same
+version-part needs to exist on the Accept header. If they differ, then 400
+should be returned.
+
++ For GET, the version is derived from the Accept header's version-part.
