@@ -20,9 +20,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Handler
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn handle-changelog-post!
-  "liberator handler function of post-as-create calls for persisting sets of
-  application transactions."
+(defn handle-changelog-get
+  "Liberator handler function for fetching a changelog."
   [ctx
    conn
    apptxn-partition
@@ -33,57 +32,44 @@
    base-url
    entity-uri-prefix
    entity-uri
-   user-entid]
-  (rucore/put-or-post-invoker ctx
-                              :post-as-create-async
-                              conn
-                              apptxn-partition
-                              apptxn-partition
-                              hdr-apptxn-id
-                              hdr-useragent-device-make
-                              hdr-useragent-device-os
-                              hdr-useragent-device-os-version
-                              base-url
-                              entity-uri-prefix
-                              entity-uri
-                              nil
-                              nil
-                              [user-entid]
-                              nil
-                              nil
-                              body-data-in-transform-fn
-                              body-data-out-transform-fn
-                              nil
-                              nil
-                              save-new-entity-fn
-                              nil
-                              nil
-                              nil
-                              nil
-                              nil
-                              nil
-                              nil
-                              nil
-                              nil
-                              apptxn-async-logger
-                              make-apptxn))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; body-data transformation functions
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmulti-by-version body-data-in-transform-fn meta/v001)
-(defmulti-by-version body-data-out-transform-fn meta/v001)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; save-entity functions
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmulti-by-version save-new-entity-fn meta/v001)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; sync and async transaction log writing functions
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmulti-by-version apptxn-async-logger meta/v001)
-(defmulti-by-version make-apptxn meta/v001)
+   user-entid
+   body-data-out-transform-fn
+   apptxn-usecase
+   apptxnlog-proc-started-usecase-event
+   apptxnlog-proc-done-success-usecase-event
+   apptxnlog-proc-done-err-occurred-usecase-event
+   apptxn-async-logger-fn
+   make-apptxn-fn]
+  (rucore/get-invoker ctx
+                      conn
+                      apptxn-partition
+                      hdr-apptxn-id
+                      hdr-useragent-device-make
+                      hdr-useragent-device-os
+                      hdr-useragent-device-os-version
+                      base-url
+                      entity-uri-prefix
+                      entity-uri
+                      nil
+                      nil
+                      [user-entid]
+                      nil
+                      body-data-out-transform-fn
+                      (fn [version
+                           conn
+                           base-url
+                           entity-uri-prefix
+                           entity-uri
+                           async-apptxnlogger
+                           _
+                           __]
+                        (let [as-of-inst (get-in )]))
+                      apptxn-usecase
+                      apptxnlog-proc-started-usecase-event
+                      apptxnlog-proc-done-success-usecase-event
+                      apptxnlog-proc-done-err-occurred-usecase-event
+                      apptxn-async-logger-fn
+                      make-apptxn-fn))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; resource
@@ -99,24 +85,29 @@
                             hdr-useragent-device-make
                             hdr-useragent-device-os
                             hdr-useragent-device-os-version
-                            authorized-fn]
+                            authorized-fn
+                            user-entid
+                            body-data-out-transform-fn
+                            apptxn-usecase
+                            apptxnlog-proc-started-usecase-event
+                            apptxnlog-proc-done-success-usecase-event
+                            apptxnlog-proc-done-err-occurred-usecase-event
+                            apptxn-async-logger-fn
+                            make-apptxn-fn]
   :available-media-types (rucore/enumerate-media-types (meta/supported-media-types mt-subtype-prefix))
   :available-charsets rumeta/supported-char-sets
   :available-languages rumeta/supported-languages
   :allowed-methods [:get]
   :authorized? authorized-fn
   :known-content-type? (rucore/known-content-type-predicate (meta/supported-media-types mt-subtype-prefix))
-  :post! (fn [ctx] (handle-changelog-post! ctx
-                                           conn
-                                           apptxn-partition
-                                           hdr-apptxn-id
-                                           hdr-useragent-device-make
-                                           hdr-useragent-device-os
-                                           hdr-useragent-device-os-version
-                                           base-url
-                                           entity-uri-prefix
-                                           (:uri (:request ctx))
-                                           nil))
-  :handle-created (fn [ctx] (rucore/handle-resp ctx
-                                                hdr-auth-token
-                                                hdr-error-mask)))
+  :handle-ok (fn [ctx] (handle-changelog-get ctx
+                                             conn
+                                             apptxn-partition
+                                             hdr-apptxn-id
+                                             hdr-useragent-device-make
+                                             hdr-useragent-device-os
+                                             hdr-useragent-device-os-version
+                                             base-url
+                                             entity-uri-prefix
+                                             (:uri (:request ctx))
+                                             nil)))

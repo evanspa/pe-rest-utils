@@ -368,9 +368,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   use case 'processing done, successful' event type.
   apptxnlog-proc-done-err-occurred-usecase-event - (more[7]) Specific application
   transaction use case 'processing done, error ocurred' event type.
-  known-entity-attr (more[8]) -  Known Datomic attribute of the request entity.
-  apptxn-async-logger-fn (more[9]) - Function for asynchronously logging application transactions.
-  make-apptxn-fn (more[10]) - Function for creating Datomic transactions for persisting
+  apptxn-async-logger-fn (more[8]) - Function for asynchronously logging application transactions.
+  make-apptxn-fn (more[9]) - Function for creating Datomic transactions for persisting
   application transaction log data."
   [ctx
    conn
@@ -394,9 +393,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         apptxnlog-proc-started-usecase-event (nth more 5)
         apptxnlog-proc-done-success-usecase-event (nth more 6)
         apptxnlog-proc-done-err-occurred-usecase-event (nth more 7)
-        known-entity-attr (nth more 8)
-        apptxn-async-logger-fn (nth more 9)
-        make-apptxn-fn (nth more 10)
+        apptxn-async-logger-fn (nth more 8)
+        make-apptxn-fn (nth more 9)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -429,7 +427,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
            apptxnlog-proc-started-usecase-event
            apptxnlog-proc-done-success-usecase-event
            apptxnlog-proc-done-err-occurred-usecase-event
-           known-entity-attr
            apptxn-async-logger-fn
            make-apptxn-fn)))
 
@@ -760,9 +757,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   use case 'processing done, successful' event type.
   apptxnlog-proc-done-err-occurred-usecase-event - (more[7]) Specific application
   transaction use case 'processing done, error ocurred' event type.
-  known-entity-attr (more[8]) -  Known Datomic attribute of the request entity.
-  apptxn-async-logger-fn (more[9]) - Function for asynchronously logging application transactions.
-  make-apptxn-fn (more[10]) - Function for creating Datomic transactions for persisting
+  apptxn-async-logger-fn (more[8]) - Function for asynchronously logging application transactions.
+  make-apptxn-fn (more[9]) - Function for creating Datomic transactions for persisting
   application transaction log data."
   [version
    accept-format-ind
@@ -790,9 +786,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         apptxnlog-proc-started-usecase-event (nth more 5)
         apptxnlog-proc-done-success-usecase-event (nth more 6)
         apptxnlog-proc-done-err-occurred-usecase-event (nth more 7)
-        known-entity-attr (nth more 8)
-        apptxn-async-logger-fn (nth more 9)
-        make-apptxn-fn (nth more 10)
+        apptxn-async-logger-fn (nth more 8)
+        make-apptxn-fn (nth more 9)
         apptxn-maker (partial make-apptxn-fn
                               version
                               ctx
