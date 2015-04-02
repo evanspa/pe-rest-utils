@@ -50,6 +50,8 @@ code that depends on the functionality of the pe-user-* libraries
   set of functions implementing the server-side core data layer of the
   PEAppTransaction Logging Framework.
 + **pe-rest-utils**: this library.
++ **[pe-rest-testutils](https://github.com/evanspa/pe-rest-testutils)**: provides
+  a set of helper functions for unit testing web services.
 + **[pe-user-rest](https://github.com/evanspa/pe-user-rest)**: provides a set of
   functions encapsulating an abstraction modeling a user within a REST API
   and leveraging [Datomic](http://www.datomic.com).
