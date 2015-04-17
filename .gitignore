@@ -7,3 +7,4 @@ target
 .nrepl-port
 pom.xml.asc
 doc
+.lein-repl-history
