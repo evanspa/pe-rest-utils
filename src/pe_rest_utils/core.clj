@@ -832,8 +832,18 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                 accept-format-ind
                                                                 fetched-entity-entid))
                                   fetched-entity))]
-        (let [resp (fetch-fn version
+        (let [if-modified-since-str (get-in ctx [:request :headers "if-modified-since"])
+              if-unmodified-since-str (get-in ctx [:request :headers "if-unmodified-since"])
+              if-modified-since-inst (when if-modified-since-str
+                                       (ucore/rfc7231str->instant if-modified-since-str))
+              if-unmodified-since-inst (when if-unmodified-since-str
+                                         (ucore/rfc7231str->instant if-unmodified-since-str))
+              resp (fetch-fn version
                              conn
+                             accept-format-ind
+                             entids
+                             if-modified-since-inst
+                             if-unmodified-since-inst
                              base-url
                              entity-uri-prefix
                              entity-uri

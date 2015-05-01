@@ -10,7 +10,7 @@
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/data.codec "0.1.0"]
                  [pe-core-utils "0.0.7"]
-                 [pe-datomic-utils "0.0.11"]
+                 [pe-datomic-utils "0.0.16"]
                  [ch.qos.logback/logback-classic "1.0.13"]
                  [liberator "0.12.2"]
                  [org.slf4j/slf4j-api "1.7.5"]

@@ -7,20 +7,21 @@
             [pe-rest-utils.changelog.meta :as meta]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [keywordize-keys]]
+            [pe-datomic-utils.core :as ducore]
             [pe-rest-utils.core :as rucore]
             [pe-rest-utils.macros :refer [defmulti-by-version]]
             [pe-rest-utils.meta :as rumeta]))
 
-(declare body-data-in-transform-fn)
 (declare body-data-out-transform-fn)
 (declare save-new-entity-fn)
 (declare apptxn-async-logger)
 (declare make-apptxn)
+(declare fetch-changelog-since)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Handler
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn handle-changelog-get
+(defn handle-changelog-since-get
   "Liberator handler function for fetching a changelog."
   [ctx
    conn
@@ -32,8 +33,8 @@
    base-url
    entity-uri-prefix
    entity-uri
-   user-entid
-   body-data-out-transform-fn
+   entid
+   ent-reqd-attrs-and-vals ; e.g., [[:fpuser/email "p@p.com"] [:fpvehicle/user 1920391]]
    apptxn-usecase
    apptxnlog-proc-started-usecase-event
    apptxnlog-proc-done-success-usecase-event
@@ -52,18 +53,30 @@
                       entity-uri
                       nil
                       nil
-                      [user-entid]
+                      [entid]
                       nil
                       body-data-out-transform-fn
                       (fn [version
                            conn
+                           accept-format-ind
+                           entids ; will ignore
+                           if-modified-since-inst
+                           if-unmodified-since-inst ; will ignore
                            base-url
                            entity-uri-prefix
                            entity-uri
                            async-apptxnlogger
-                           _
-                           __]
-                        (let [as-of-inst (get-in )]))
+                           merge-embedded-fn ; will ignore
+                           merge-links-fn]   ; will ignore
+                        (fetch-changelog-since version
+                                               conn
+                                               accept-format-ind
+                                               ent-reqd-attrs-and-vals
+                                               if-modified-since-inst
+                                               base-url
+                                               entity-uri-prefix
+                                               entity-uri
+                                               async-apptxnlogger))
                       apptxn-usecase
                       apptxnlog-proc-started-usecase-event
                       apptxnlog-proc-done-success-usecase-event
@@ -72,35 +85,46 @@
                       make-apptxn-fn))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; fetch-changelog-since function
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defmulti-by-version fetch-changelog-since meta/v001)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; body-data transformation functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defmulti-by-version body-data-out-transform-fn meta/v001)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; resource
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defresource changelog-res [conn
-                            apptxn-partition
-                            mt-subtype-prefix
-                            hdr-auth-token
-                            hdr-error-mask
-                            base-url
-                            entity-uri-prefix
-                            hdr-apptxn-id
-                            hdr-useragent-device-make
-                            hdr-useragent-device-os
-                            hdr-useragent-device-os-version
-                            authorized-fn
-                            user-entid
-                            body-data-out-transform-fn
-                            apptxn-usecase
-                            apptxnlog-proc-started-usecase-event
-                            apptxnlog-proc-done-success-usecase-event
-                            apptxnlog-proc-done-err-occurred-usecase-event
-                            apptxn-async-logger-fn
-                            make-apptxn-fn]
+(defresource changelog-since-res
+  [conn
+   apptxn-partition
+   mt-subtype-prefix
+   hdr-auth-token
+   hdr-error-mask
+   base-url
+   entity-uri-prefix
+   hdr-apptxn-id
+   hdr-useragent-device-make
+   hdr-useragent-device-os
+   hdr-useragent-device-os-version
+   authorized-fn
+   entid
+   ent-reqd-attr-entids
+   apptxn-usecase
+   apptxnlog-proc-started-usecase-event
+   apptxnlog-proc-done-success-usecase-event
+   apptxnlog-proc-done-err-occurred-usecase-event
+   &
+   more]
   :available-media-types (rucore/enumerate-media-types (meta/supported-media-types mt-subtype-prefix))
   :available-charsets rumeta/supported-char-sets
   :available-languages rumeta/supported-languages
   :allowed-methods [:get]
   :authorized? authorized-fn
   :known-content-type? (rucore/known-content-type-predicate (meta/supported-media-types mt-subtype-prefix))
-  :handle-ok (fn [ctx] (handle-changelog-get ctx
+  :handle-ok (fn [ctx] (handle-changelog-since-get ctx
                                              conn
                                              apptxn-partition
                                              hdr-apptxn-id
@@ -110,4 +134,12 @@
                                              base-url
                                              entity-uri-prefix
                                              (:uri (:request ctx))
-                                             nil)))
+                                             entid
+                                             ent-reqd-attr-entids
+                                             body-data-out-transform-fn
+                                             apptxn-usecase
+                                             apptxnlog-proc-started-usecase-event
+                                             apptxnlog-proc-done-success-usecase-event
+                                             apptxnlog-proc-done-err-occurred-usecase-event
+                                             (nth more 0)    ;apptxn-async-logger-fn
+                                             (nth more 1)))) ;make-apptxn-fn

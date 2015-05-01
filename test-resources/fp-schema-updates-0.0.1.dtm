@@ -1,0 +1,229 @@
+[
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; vehicle attributes
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpvehicle/user
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The user associated with this vehicle."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpvehicle/name
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/doc "A vehicle's name"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpvehicle/date-added
+  :db/valueType :db.type/instant
+  :db/cardinality :db.cardinality/one
+  :db/doc "The date this vehicle was created by the user."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpvehicle/fuel-capacity
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "A vehicle's fuel capacity"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpvehicle/min-reqd-octane
+  :db/valueType :db.type/long
+  :db/cardinality :db.cardinality/one
+  :db/doc "A vehicle's minimum required octane"
+  :db.install/_attribute :db.part/db}
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; fuel station attributes
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/user
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The user associated with this fuel station."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/name
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station's name."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/date-added
+  :db/valueType :db.type/instant
+  :db/cardinality :db.cardinality/one
+  :db/doc "The date this fuel station was created by the user."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/street
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station street name"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/city
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station city name"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/state
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station state name"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/zip
+  :db/valueType :db.type/string
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station zip code"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/latitude
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station latitude"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelstation/longitude
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "Fuel station longitude"
+  :db.install/_attribute :db.part/db}
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; Environment log attributes
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/user
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The user associated with this environment log."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/vehicle
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The vehicle associated with this environment log."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/log-date
+  :db/valueType :db.type/instant
+  :db/cardinality :db.cardinality/one
+  :db/doc "The date of the log record."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/reported-avg-mpg
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "Reported average MPG reading."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/reported-avg-mph
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "Reported average MPH reading."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/outside-temp
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "Reported outside temperature."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/odometer
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "Odometer reading"
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpenvironmentlog/dte
+  :db/valueType :db.type/long
+  :db/cardinality :db.cardinality/one
+  :db/doc "Distance-to-empty."
+  :db.install/_attribute :db.part/db}
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; Fuel purchase log attributes
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/user
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The user associated with this fuel purchase log."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/vehicle
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The vehicle associated with this fuel purchase log."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/fuelstation
+  :db/valueType :db.type/ref
+  :db/cardinality :db.cardinality/one
+  :db/doc "The fuel station associated with this fuel purchase log."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/purchase-date
+  :db/valueType :db.type/instant
+  :db/cardinality :db.cardinality/one
+  :db/doc "The date of the purchase."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/got-car-wash
+  :db/valueType :db.type/boolean
+  :db/cardinality :db.cardinality/one
+  :db/doc "Whether a car wash was purchased."
+  :db.install/_attribute :db.part/db}
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/carwash-per-gal-discount
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "The amount per-gallon discounted having purchased a car wash."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/num-gallons
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "The number of gallons purchased."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/octane
+  :db/valueType :db.type/long
+  :db/cardinality :db.cardinality/one
+  :db/doc "The octane of the fuel purchased."
+  :db.install/_attribute :db.part/db}
+
+ {:db/id #db/id[:db.part/db]
+  :db/ident :fpfuelpurchaselog/gallon-price
+  :db/valueType :db.type/double
+  :db/cardinality :db.cardinality/one
+  :db/doc "The price per gallon."
+  :db.install/_attribute :db.part/db}
+]
