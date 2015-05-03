@@ -16,12 +16,12 @@
 (declare save-new-entity-fn)
 (declare apptxn-async-logger)
 (declare make-apptxn)
-(declare fetch-changelog-since)
+(declare fetch-changelog)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Handler
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn handle-changelog-since-get
+(defn handle-changelog-get
   "Liberator handler function for fetching a changelog."
   [ctx
    conn
@@ -34,7 +34,8 @@
    entity-uri-prefix
    entity-uri
    entid
-   ent-reqd-attrs-and-vals ; e.g., [[:fpuser/email "p@p.com"] [:fpvehicle/user 1920391]]
+   ent-reqd-attrs-and-vals
+   body-data-out-transform-fn
    apptxn-usecase
    apptxnlog-proc-started-usecase-event
    apptxnlog-proc-done-success-usecase-event
@@ -68,7 +69,7 @@
                            async-apptxnlogger
                            merge-embedded-fn ; will ignore
                            merge-links-fn]   ; will ignore
-                        (fetch-changelog-since version
+                        (fetch-changelog version
                                                conn
                                                accept-format-ind
                                                ent-reqd-attrs-and-vals
@@ -85,9 +86,9 @@
                       make-apptxn-fn))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; fetch-changelog-since function
+;; fetch-changelog function
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmulti-by-version fetch-changelog-since meta/v001)
+(defmulti-by-version fetch-changelog meta/v001)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; body-data transformation functions
@@ -97,7 +98,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; resource
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defresource changelog-since-res
+(defresource changelog-res
   [conn
    apptxn-partition
    mt-subtype-prefix
@@ -123,8 +124,8 @@
   :available-languages rumeta/supported-languages
   :allowed-methods [:get]
   :authorized? authorized-fn
-  :known-content-type? (rucore/known-content-type-predicate (meta/supported-media-types mt-subtype-prefix))
-  :handle-ok (fn [ctx] (handle-changelog-since-get ctx
+  :modified-since? (fn [ctx] true)
+  :handle-ok (fn [ctx] (handle-changelog-get ctx
                                              conn
                                              apptxn-partition
                                              hdr-apptxn-id

@@ -9,9 +9,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Media type vars
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn mt-subtype-changelog-since
+(defn mt-subtype-changelog
   [mt-subtype-prefix]
-  (str mt-subtype-prefix "changelog-since"))
+  (str mt-subtype-prefix "changelog"))
 
 (defn supported-media-types
   [mt-subtype-prefix]
@@ -19,15 +19,15 @@
   (including version and format indicators) supported by this REST API."
   {rumeta/mt-type
    {:subtypes
-    {(mt-subtype-changelog-since mt-subtype-prefix)
+    {(mt-subtype-changelog mt-subtype-prefix)
      {:versions {v001 {:format-inds #{"edn" "json"}}}}}}})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Link relations
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(def changelog-since-relation :changelog-since)
+(def changelog-relation :changelog)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; URL path components
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(def pathcomp-changelog-since "changelog-since")
+(def pathcomp-changelog "changelog")

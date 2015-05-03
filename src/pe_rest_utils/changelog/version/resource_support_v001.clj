@@ -6,7 +6,7 @@
             [pe-rest-utils.core :as core]
             [pe-datomic-utils.core :as ducore]
             [pe-rest-utils.changelog.meta :as clmeta]
-            [pe-rest-utils.changelog.resource-support :refer [fetch-changelog-since
+            [pe-rest-utils.changelog.resource-support :refer [fetch-changelog
                                                               body-data-out-transform-fn]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -17,9 +17,9 @@
   (identity body-data))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; 0.0.1 fetch-changelog-since function
+;; 0.0.1 fetch-changelog function
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmethod fetch-changelog-since clmeta/v001
+(defmethod fetch-changelog clmeta/v001
   [version
    conn
    accept-format-ind
@@ -53,13 +53,14 @@
                                                   #(u-transform-fn % mt-fn loc-fn assoc-links-fn keys-to-dissoc)
                                                   #(d-transform-fn % mt-fn loc-fn))]
                   (merge-with concat ocl cl))
-                (let [[entid mt-fn loc-fn assoc-links-fn keys-to-dissoc] ent-reqd-attrs-and-val-parts]
+                (let [[entid reqd-attr mt-fn loc-fn assoc-links-fn keys-to-dissoc] ent-reqd-attrs-and-val-parts]
                   (if (ducore/is-entity-updated-since conn if-modified-since-inst entid)
-                    (let [db (d/db conn)
-                          since-db (d/since db if-modified-since-inst)]
+                    (let [since-db (d/since (d/db conn) if-modified-since-inst)]
                       (merge-with concat
                                   ocl
-                                  {:updates [(u-transform-fn (into {:db/id entid} (d/entity since-db entid))
+                                  {:updates [(u-transform-fn (into {:db/id entid
+                                                                    :last-modified (ducore/txn-time conn entid)}
+                                                                   (d/entity since-db entid))
                                                              mt-fn
                                                              loc-fn
                                                              assoc-links-fn

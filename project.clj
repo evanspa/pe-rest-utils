@@ -10,7 +10,7 @@
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/data.codec "0.1.0"]
                  [pe-core-utils "0.0.7"]
-                 [pe-datomic-utils "0.0.16"]
+                 [pe-datomic-utils "0.0.17"]
                  [ch.qos.logback/logback-classic "1.0.13"]
                  [liberator "0.12.2"]
                  [org.slf4j/slf4j-api "1.7.5"]
@@ -21,7 +21,7 @@
                  [environ "1.0.0"]]
   :resource-paths ["resources"]
   :codox {:exclude [user]
-          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.3/"
+          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.4/"
           :src-linenum-anchor-prefix "L"}
   :profiles {:dev {:source-paths ["dev"]
                    :plugins [[cider/cider-nrepl "0.9.0-SNAPSHOT"]]

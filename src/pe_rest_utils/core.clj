@@ -399,7 +399,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         accept-charset-name charset
         accept-lang lang
         accept-mt media-type
+        _ (log/debug "in get-invoker, accept-mt: " accept-mt)
         parsed-accept-mt (parse-media-type accept-mt)
+        _ (log/debug "in get-invoker, parsed-accept-mt: " parsed-accept-mt)
         version (:version parsed-accept-mt)
         accept-format-ind (:format-ind parsed-accept-mt)
         accept-charset (get meta/char-sets accept-charset-name)]
@@ -646,7 +648,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                 (:db/id entity-txn-or-txnmap))
                              tx @(d/transact conn (txn-maker-fn apptxnlog-txn))
                              saved-entity-entid (d/resolve-tempid (d/db conn) (:tempids tx) newentity-tempid)
-                             entity-txn-time (ducore/txn-time conn saved-entity-entid known-entity-attr)
+                             entity-txn-time (ducore/txn-time conn saved-entity-entid)
                              entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
                              body-data (body-data-out-transform-fn version body-data)
                              saved-entity (merge-links-fn body-data saved-entity-entid)
@@ -655,7 +657,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                  :location (make-abs-link-href base-url
                                                                (str entity-uri
                                                                     "/"
-                                                                    saved-entity-entid));(make-abs-entity-link-href base-url entity-uri saved-entity-entid)
+                                                                    saved-entity-entid))
                                  :last-modified entity-txn-time-str
                                  :entity (write-res saved-entity accept-format-ind accept-charset)})))))
                   (post-as-create-async []
@@ -694,7 +696,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                           tx @(d/transact conn (if apptxnlog-txn
                                                  (conj apptxnlog-txn entity-txnmap)
                                                  (conj [] entity-txnmap)))
-                          entity-txn-time (ducore/txn-time conn (last entids) known-entity-attr)
+                          entity-txn-time (ducore/txn-time conn (last entids))
                           entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
                           body-data (body-data-out-transform-fn version body-data)
                           saved-entity (merge-links-fn body-data (last entids))
@@ -851,13 +853,16 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                              merge-embedded-fn
                              merge-links-fn)]
           (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-success-usecase-event))
-          (merge resp
-                 (when-let [body-data (:fetched-entity resp)]
-                   {:entity (write-res (body-data-out-transform-fn version body-data)
-                                       accept-format-ind
-                                       accept-charset)})
-                 (when (:auth-token ctx)
-                   {:auth-token (:auth-token ctx)}))))
+          (let [resp
+                (merge resp
+                       (when-let [body-data (:fetched-entity resp)]
+                         {:entity (write-res (body-data-out-transform-fn version body-data)
+                                             accept-format-ind
+                                             accept-charset)})
+                       (when (:auth-token ctx)
+                         {:auth-token (:auth-token ctx)}))]
+            (log/debug "resp (in get-t): " resp)
+            resp)))
       (catch Exception e
         (log/error e "Exception caught")
         (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-err-occurred-usecase-event
