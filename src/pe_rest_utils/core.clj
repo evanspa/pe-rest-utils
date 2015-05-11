@@ -395,13 +395,13 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         apptxnlog-proc-done-err-occurred-usecase-event (nth more 7)
         apptxn-async-logger-fn (nth more 8)
         make-apptxn-fn (nth more 9)
+        hdr-auth-token (nth more 10)
+        hdr-error-mask (nth more 11)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
         accept-mt media-type
-        _ (log/debug "in get-invoker, accept-mt: " accept-mt)
         parsed-accept-mt (parse-media-type accept-mt)
-        _ (log/debug "in get-invoker, parsed-accept-mt: " parsed-accept-mt)
         version (:version parsed-accept-mt)
         accept-format-ind (:format-ind parsed-accept-mt)
         accept-charset (get meta/char-sets accept-charset-name)]
@@ -430,7 +430,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
            apptxnlog-proc-done-success-usecase-event
            apptxnlog-proc-done-err-occurred-usecase-event
            apptxn-async-logger-fn
-           make-apptxn-fn)))
+           make-apptxn-fn
+           hdr-auth-token
+           hdr-error-mask)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Templates
@@ -565,7 +567,11 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
         {:unprocessable-entity true
          :error-mask validation-mask}
-        (let [transformed-body-data (body-data-in-transform-fn version body-data)
+        (let [transformed-body-data (body-data-in-transform-fn version
+                                                               conn
+                                                               (last entids)
+                                                               body-data
+                                                               async-apptxnlogger)
               merge-links-fn (fn [saved-entity saved-entity-entid]
                                (if links-fn
                                  (assoc saved-entity
@@ -649,8 +655,12 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                              tx @(d/transact conn (txn-maker-fn apptxnlog-txn))
                              saved-entity-entid (d/resolve-tempid (d/db conn) (:tempids tx) newentity-tempid)
                              entity-txn-time (ducore/txn-time conn saved-entity-entid)
-                             entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
-                             body-data (body-data-out-transform-fn version body-data)
+                             body-data (body-data-out-transform-fn version
+                                                                   conn
+                                                                   saved-entity-entid
+                                                                   body-data
+                                                                   async-apptxnlogger)
+                             body-data (assoc body-data :last-modified (.getTime entity-txn-time))
                              saved-entity (merge-links-fn body-data saved-entity-entid)
                              saved-entity (merge-embedded-fn saved-entity saved-entity-entid)]
                          (merge {:status 201
@@ -658,7 +668,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                (str entity-uri
                                                                     "/"
                                                                     saved-entity-entid))
-                                 :last-modified entity-txn-time-str
                                  :entity (write-res saved-entity accept-format-ind accept-charset)})))))
                   (post-as-create-async []
                     (post-as-create-t
@@ -678,7 +687,11 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                               merge-links-fn)]
                       (merge resp
                              (when-let [body-data (:do-entity resp)]
-                               {:entity (write-res (body-data-out-transform-fn version body-data)
+                               {:entity (write-res (body-data-out-transform-fn version
+                                                                               conn
+                                                                               nil
+                                                                               body-data
+                                                                               async-apptxnlogger)
                                                    accept-format-ind
                                                    accept-charset)})
                              (when (:auth-token ctx)
@@ -697,13 +710,16 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                  (conj apptxnlog-txn entity-txnmap)
                                                  (conj [] entity-txnmap)))
                           entity-txn-time (ducore/txn-time conn (last entids))
-                          entity-txn-time-str (ucore/instant->rfc7231str entity-txn-time)
-                          body-data (body-data-out-transform-fn version body-data)
+                          body-data (body-data-out-transform-fn version
+                                                                conn
+                                                                (last entids)
+                                                                body-data
+                                                                async-apptxnlogger)
+                          body-data (assoc body-data :last-modified (.getTime entity-txn-time))
                           saved-entity (merge-links-fn body-data (last entids))
                           saved-entity (merge-embedded-fn saved-entity (last entids))]
                       (merge {:status 200
                               :location entity-uri
-                              :last-modified entity-txn-time-str
                               :entity (write-res saved-entity accept-format-ind accept-charset)}
                              (when (:auth-token ctx)
                                {:auth-token (:auth-token ctx)}))))]
@@ -790,6 +806,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         apptxnlog-proc-done-err-occurred-usecase-event (nth more 7)
         apptxn-async-logger-fn (nth more 8)
         make-apptxn-fn (nth more 9)
+        hdr-auth-token (nth more 10)
+        hdr-error-mask (nth more 11)
         apptxn-maker (partial make-apptxn-fn
                               version
                               ctx
@@ -840,29 +858,39 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                        (ucore/rfc7231str->instant if-modified-since-str))
               if-unmodified-since-inst (when if-unmodified-since-str
                                          (ucore/rfc7231str->instant if-unmodified-since-str))
-              resp (fetch-fn version
-                             conn
-                             accept-format-ind
-                             entids
-                             if-modified-since-inst
-                             if-unmodified-since-inst
-                             base-url
-                             entity-uri-prefix
-                             entity-uri
-                             async-apptxnlogger
-                             merge-embedded-fn
-                             merge-links-fn)]
+              entity (fetch-fn version
+                               ctx
+                               conn
+                               accept-format-ind
+                               entids
+                               if-modified-since-inst
+                               if-unmodified-since-inst
+                               base-url
+                               entity-uri-prefix
+                               entity-uri
+                               async-apptxnlogger
+                               merge-embedded-fn
+                               merge-links-fn)]
           (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-success-usecase-event))
-          (let [resp
-                (merge resp
-                       (when-let [body-data (:fetched-entity resp)]
-                         {:entity (write-res (body-data-out-transform-fn version body-data)
-                                             accept-format-ind
-                                             accept-charset)})
-                       (when (:auth-token ctx)
-                         {:auth-token (:auth-token ctx)}))]
-            (log/debug "resp (in get-t): " resp)
-            resp)))
+          (cond
+            (:err ctx) (ring-response {:status 500})
+            (:unprocessable-entity ctx) (-> (ring-response {:status 422})
+                                            (assoc-err-mask ctx :error-mask hdr-error-mask))
+            (:entity-already-exists ctx) (-> (ring-response {:status 403})
+                                             (assoc-err-mask ctx :error-mask hdr-error-mask))
+            :else (ring-response
+                   (merge {}
+                          {:status 200}
+                          {:headers (merge {}
+                                           (when-let [auth-token (:auth-token ctx)]
+                                             {hdr-auth-token auth-token}))}
+                          (when entity {:body (write-res (body-data-out-transform-fn version
+                                                                                     conn
+                                                                                     (last entids)
+                                                                                     entity
+                                                                                     async-apptxnlogger)
+                                                         accept-format-ind
+                                                         accept-charset)}))))))
       (catch Exception e
         (log/error e "Exception caught")
         (when apptxn-usecase (async-apptxnlogger apptxnlog-proc-done-err-occurred-usecase-event
@@ -890,7 +918,5 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                    (when-let [location (:location ctx)]
                                      {"location" location})
                                    (when-let [auth-token (:auth-token ctx)]
-                                     {hdr-auth-token auth-token})
-                                   (when (:last-modified ctx)
-                                     {"last-modified" (:last-modified ctx)}))}
+                                     {hdr-auth-token auth-token}))}
                   (when (:entity ctx) {:body (:entity ctx)})))))

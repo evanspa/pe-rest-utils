@@ -1,6 +1,7 @@
 (ns pe-rest-utils.changelog.version.resource-support-v001
   (:require [datomic.api :refer [q db] :as d]
             [clj-time.core :as t]
+            [clj-time.coerce :as tc]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [keywordize-keys]]
             [pe-rest-utils.core :as core]
@@ -13,18 +14,22 @@
 ;; 0.0.1 body-data transformation functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmethod body-data-out-transform-fn clmeta/v001
-  [version body-data]
-  (identity body-data))
+  [version
+   conn
+   _ ; there is not 'entid' associated with a changelog
+   changelog
+   apptxnlogger]
+  (identity changelog))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 0.0.1 fetch-changelog function
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmethod fetch-changelog clmeta/v001
   [version
+   ctx
    conn
    accept-format-ind
-   ent-reqd-attrs-and-vals ;[[:fpuser/email "p@p.com" "application/vnd.fp" assoc-links-fn] [:fpvehicle/user 1920391]]
-   if-modified-since-inst
+   ent-reqd-attrs-and-vals
    base-url
    entity-uri-prefix
    entity-uri
@@ -43,32 +48,37 @@
           (d-transform-fn [ent mt-fn loc-fn]
             {:location (loc-fn (:db/id ent))
              :media-type (mt-fn version accept-format-ind)})]
-    (reduce (fn [ocl ent-reqd-attrs-and-val-parts]
-              (if (keyword? (first ent-reqd-attrs-and-val-parts))
-                (let [[reqd-attr reqd-attr-val mt-fn loc-fn assoc-links-fn keys-to-dissoc] ent-reqd-attrs-and-val-parts
-                      cl (ducore/change-log-since conn
-                                                  if-modified-since-inst
-                                                  reqd-attr
-                                                  reqd-attr-val
-                                                  #(u-transform-fn % mt-fn loc-fn assoc-links-fn keys-to-dissoc)
-                                                  #(d-transform-fn % mt-fn loc-fn))]
-                  (merge-with concat ocl cl))
-                (let [[entid reqd-attr mt-fn loc-fn assoc-links-fn keys-to-dissoc] ent-reqd-attrs-and-val-parts]
-                  (if (ducore/is-entity-updated-since conn if-modified-since-inst entid)
-                    (let [since-db (d/since (d/db conn) if-modified-since-inst)]
-                      (merge-with concat
-                                  ocl
-                                  {:updates [(u-transform-fn (into {:db/id entid
-                                                                    :last-modified (ducore/txn-time conn entid)}
-                                                                   (d/entity since-db entid))
-                                                             mt-fn
-                                                             loc-fn
-                                                             assoc-links-fn
-                                                             keys-to-dissoc)]}))
-                    (if (ducore/is-entity-deleted-since conn if-modified-since-inst entid)
-                      (merge-with concat
-                                  ocl
-                                  {:deletions [(d-transform-fn {:db/id entid} loc-fn)]})
-                      ocl)))))
-            {}
-            ent-reqd-attrs-and-vals)))
+    (let [if-modified-since-str (get-in ctx [:request :query-params clmeta/since-query-param])
+          if-modified-since-inst (.toDate (tc/from-long (Long. if-modified-since-str)))]
+      (log/debug "in f-c-l, if-modified-since-str: " if-modified-since-str)
+      (log/debug "in f-c-l, if-modified-since-inst: " if-modified-since-inst)
+      (log/debug "in f-c-l, ent-reqd-attrs-and-vals: " ent-reqd-attrs-and-vals)
+      (reduce (fn [ocl ent-reqd-attrs-and-val-parts]
+                (if (keyword? (first ent-reqd-attrs-and-val-parts))
+                  (let [[reqd-attr reqd-attr-val mt-fn loc-fn assoc-links-fn keys-to-dissoc] ent-reqd-attrs-and-val-parts
+                        cl (ducore/change-log-since conn
+                                                    if-modified-since-inst
+                                                    reqd-attr
+                                                    reqd-attr-val
+                                                    #(u-transform-fn % mt-fn loc-fn assoc-links-fn keys-to-dissoc)
+                                                    #(d-transform-fn % mt-fn loc-fn))]
+                    (merge-with concat ocl cl))
+                  (let [[entid reqd-attr mt-fn loc-fn assoc-links-fn keys-to-dissoc] ent-reqd-attrs-and-val-parts]
+                    (if (ducore/is-entity-updated-since conn if-modified-since-inst entid)
+                      (let [since-db (d/since (d/db conn) if-modified-since-inst)]
+                        (merge-with concat
+                                    ocl
+                                    {:updates [(u-transform-fn (into {:db/id entid
+                                                                      :last-modified (ducore/txn-time conn entid)}
+                                                                     (d/entity since-db entid))
+                                                               mt-fn
+                                                               loc-fn
+                                                               assoc-links-fn
+                                                               keys-to-dissoc)]}))
+                      (if (ducore/is-entity-deleted-since conn if-modified-since-inst entid)
+                        (merge-with concat
+                                    ocl
+                                    {:deletions [(d-transform-fn {:db/id entid} mt-fn loc-fn)]})
+                        ocl)))))
+              {}
+              ent-reqd-attrs-and-vals))))
