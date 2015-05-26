@@ -1,4 +1,4 @@
-(defproject pe-rest-utils "0.0.6"
+(defproject pe-rest-utils "0.0.7-SNAPSHOT"
   :description "A Clojure library providing a set of helper functions for building REST APIs on top of Datomic."
   :url "https://github.com/evanspa/pe-rest-utils"
   :license {:name "MIT"
