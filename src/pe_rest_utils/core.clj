@@ -211,7 +211,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    body-data-in-transform-fn
    body-data-out-transform-fn
    existing-entity-fns
-   saveentity-entity-already-exists-bit
    next-entity-id-fn
    save-new-entity-fn
    save-entity-fn
@@ -256,7 +255,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    body-data-in-transform-fn
                    body-data-out-transform-fn
                    existing-entity-fns
-                   saveentity-entity-already-exists-bit
                    next-entity-id-fn
                    save-new-entity-fn
                    save-entity-fn
@@ -338,14 +336,13 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    existing-entity-fns
    &
    more]
-  (let [saveentity-entity-already-exists-bit (nth more 0)
-        next-entity-id-fn (nth more 1)
-        save-new-entity-fn (nth more 2)
-        save-entity-fn (nth more 3)
-        hdr-establish-session (nth more 4)
-        make-session-fn (nth more 5)
-        post-as-do-fn (nth more 6)
-        known-entity-attr (nth more 7)
+  (let [next-entity-id-fn (nth more 0)
+        save-new-entity-fn (nth more 1)
+        save-entity-fn (nth more 2)
+        hdr-establish-session (nth more 3)
+        make-session-fn (nth more 4)
+        post-as-do-fn (nth more 5)
+        known-entity-attr (nth more 6)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
     (try
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
@@ -378,24 +375,30 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                   saved-entity-entid))
                                     saved-entity))]
           (letfn [(post-as-create []
-                    (let [does-already-exist (when existing-entity-fns
-                                               (reduce (fn [does-already-exist
-                                                            [name-extraction-fn
-                                                             get-entities-by-name-fn]]
-                                                         (or does-already-exist
-                                                             (when-let [name (name-extraction-fn version transformed-body-data)]
-                                                               (let [args (flatten (conj []
-                                                                                         version
-                                                                                         db-spec
-                                                                                         entids
-                                                                                         name))
-                                                                     entities (apply get-entities-by-name-fn args)]
-                                                                 (> (count entities) 0)))))
-                                                       false
-                                                       existing-entity-fns))]
+                    (let [[does-already-exist already-exists-err-bit]
+                          (when existing-entity-fns
+                            (reduce (fn [[overall-does-already-exist overall-already-exists-err-bit]
+                                         [name-extraction-fn
+                                          get-entities-by-name-fn
+                                          already-exists-err-bit]]
+                                      (if overall-does-already-exist
+                                        [true overall-already-exists-err-bit]
+                                        (when-let [name (name-extraction-fn version transformed-body-data)]
+                                          (let [args (flatten (conj []
+                                                                    version
+                                                                    db-spec
+                                                                    entids
+                                                                    name))
+                                                entities (apply get-entities-by-name-fn args)
+                                                does-already-exist (> (count entities) 0)]
+                                            (if does-already-exist
+                                              [true already-exists-err-bit]
+                                              [false nil])))))
+                                    [false nil]
+                                    existing-entity-fns))]
                       (if does-already-exist
                         {:entity-already-exists true
-                         :error-mask (bit-or saveentity-entity-already-exists-bit
+                         :error-mask (bit-or already-exists-err-bit
                                              any-issues-bit)}
                         (j/with-db-transaction [conn db-spec]
                           (let [new-entity-id (next-entity-id-fn version conn)
