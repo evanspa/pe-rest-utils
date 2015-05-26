@@ -2,8 +2,9 @@
 
 [![Build Status](https://travis-ci.org/evanspa/pe-rest-utils.svg)](https://travis-ci.org/evanspa/pe-rest-utils)
 
-A Clojure library for building easy-to-version hypermedia REST services on top
-of Liberator.
+A Clojure library for building easy-to-version, CRUD-style hypermedia REST services on top
+of Liberator.  pe-rest-utils assumes a JDBC-based backend for implementing the
+CRUD operations.
 
 pe-rest-utils is part of the
 [pe-* Clojure Library Suite](#pe--clojure-library-suite).
@@ -27,7 +28,7 @@ pe-rest-utils is available from Clojars.  Add the following dependency to your
 `project.clj` file:
 
 ```
-[pe-rest-utils "0.0.5"]
+[pe-rest-utils "0.0.6"]
 ```
 
 ## pe-* Clojure Library Suite
@@ -35,7 +36,9 @@ The pe-* Clojure library suite is a set of Clojure libraries to aid in the
 development of Clojure and Java based applications.
 *(Each library is available on Clojars.)*
 + **[pe-core-utils](https://github.com/evanspa/pe-core-utils)**: provides a set
-  of various collection-related, date-related and other helpers functions.
+of various collection-related, date-related and other helpers functions.
++ **[pe-jdbc-utils](https://github.com/evanspa/pe-jdbc-utils)**: provides
+  a set of helper functions for working with JDBC.
 + **[pe-datomic-utils](https://github.com/evanspa/pe-datomic-utils)**: provides
   a set of helper functions for working with [Datomic](https://www.datomic.com).
 + **[pe-datomic-testutils](https://github.com/evanspa/pe-datomic-testutils)**: provides

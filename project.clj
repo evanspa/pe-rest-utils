@@ -9,24 +9,24 @@
                  [org.clojure/data.json "0.2.5"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/data.codec "0.1.0"]
-                 [pe-core-utils "0.0.7"]
-                 [pe-datomic-utils "0.0.17"]
+                 [org.clojure/java.jdbc "0.3.6"]
                  [ch.qos.logback/logback-classic "1.0.13"]
-                 [liberator "0.12.2"]
                  [org.slf4j/slf4j-api "1.7.5"]
-                 [com.datomic/datomic-free "0.9.5130"
-                  :exclusions [org.slf4j/slf4j-nop
-                               joda-time
-                               org.slf4j/slf4j-log4j12]]
-                 [environ "1.0.0"]]
+                 [liberator "0.12.2"]
+                 [environ "1.0.0"]
+                 [pe-core-utils "0.0.10"]
+                 [pe-jdbc-utils "0.0.2"]]
   :resource-paths ["resources"]
   :codox {:exclude [user]
-          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.5/"
+          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.6/"
           :src-linenum-anchor-prefix "L"}
   :profiles {:dev {:source-paths ["dev"]
                    :plugins [[cider/cider-nrepl "0.9.0-SNAPSHOT"]]
                    :dependencies [[org.clojure/tools.namespace "0.2.7"]
                                   [org.clojure/java.classpath "0.2.2"]
-                                  [org.clojure/tools.nrepl "0.2.7"]]}}
+                                  [org.clojure/tools.nrepl "0.2.7"]
+                                  [org.postgresql/postgresql "9.4-1201-jdbc41"]]}
+             :test {:resource-paths ["test-resources"]}}
+  :jvm-opts ["-Xmx1g" "-DUREST_LOGS_DIR=logs"]
   :repositories [["releases" {:url "https://clojars.org/repo"
                               :creds :gpg}]])

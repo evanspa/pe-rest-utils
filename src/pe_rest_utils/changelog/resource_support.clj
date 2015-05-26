@@ -1,13 +1,11 @@
 (ns pe-rest-utils.changelog.resource-support
   "Core components for exposing the server-side processing of the
   PEAppTransaction Logging Framework as a REST API."
-  (:require [datomic.api :refer [q db] :as d]
-            [clj-time.core :as t]
+  (:require [clj-time.core :as t]
             [liberator.core :refer [defresource]]
             [pe-rest-utils.changelog.meta :as clmeta]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [keywordize-keys]]
-            [pe-datomic-utils.core :as ducore]
             [pe-rest-utils.core :as rucore]
             [pe-rest-utils.macros :refer [defmulti-by-version]]
             [pe-rest-utils.meta :as rumeta]))
@@ -24,73 +22,47 @@
 (defn handle-changelog-get
   "Liberator handler function for fetching a changelog."
   [ctx
-   conn
-   apptxn-partition
-   hdr-apptxn-id
-   hdr-useragent-device-make
-   hdr-useragent-device-os
-   hdr-useragent-device-os-version
+   db-spec
    base-url
    entity-uri-prefix
    entity-uri
    entid
    ent-reqd-attrs-and-vals
    body-data-out-transform-fn
-   apptxn-usecase
-   apptxnlog-proc-started-usecase-event
-   apptxnlog-proc-done-success-usecase-event
-   apptxnlog-proc-done-err-occurred-usecase-event
-   apptxn-async-logger-fn
-   make-apptxn-fn
-   &
-   more]
-  (let [hdr-auth-token (nth more 0)
-        hdr-error-mask (nth more 1)]
-    (rucore/get-invoker ctx
-                        conn
-                        apptxn-partition
-                        hdr-apptxn-id
-                        hdr-useragent-device-make
-                        hdr-useragent-device-os
-                        hdr-useragent-device-os-version
-                        base-url
-                        entity-uri-prefix
-                        entity-uri
-                        nil
-                        nil
-                        [entid]
-                        nil
-                        body-data-out-transform-fn
-                        (fn [version
-                             ctx
-                             conn
-                             accept-format-ind
-                             entids ; will ignore
-                             if-modified-since-inst ; will ignore
-                             if-unmodified-since-inst ; will ignore
-                             base-url
-                             entity-uri-prefix
-                             entity-uri
-                             async-apptxnlogger
-                             merge-embedded-fn ; will ignore
-                             merge-links-fn]   ; will ignore
-                          (fetch-changelog version
-                                           ctx
-                                           conn
-                                           accept-format-ind
-                                           ent-reqd-attrs-and-vals
-                                           base-url
-                                           entity-uri-prefix
-                                           entity-uri
-                                           async-apptxnlogger))
-                        apptxn-usecase
-                        apptxnlog-proc-started-usecase-event
-                        apptxnlog-proc-done-success-usecase-event
-                        apptxnlog-proc-done-err-occurred-usecase-event
-                        apptxn-async-logger-fn
-                        make-apptxn-fn
-                        hdr-auth-token
-                        hdr-error-mask)))
+   hdr-auth-token
+   hdr-error-mask]
+  (rucore/get-invoker ctx
+                      db-spec
+                      base-url
+                      entity-uri-prefix
+                      entity-uri
+                      nil
+                      nil
+                      [entid]
+                      nil
+                      body-data-out-transform-fn
+                      (fn [version
+                           ctx
+                           db-spec
+                           accept-format-ind
+                           entids ; will ignore
+                           if-modified-since-inst ; will ignore
+                           if-unmodified-since-inst ; will ignore
+                           base-url
+                           entity-uri-prefix
+                           entity-uri
+                           merge-embedded-fn ; will ignore
+                           merge-links-fn]   ; will ignore
+                        (fetch-changelog version
+                                         ctx
+                                         db-spec
+                                         accept-format-ind
+                                         ent-reqd-attrs-and-vals
+                                         base-url
+                                         entity-uri-prefix
+                                         entity-uri))
+                      hdr-auth-token
+                      hdr-error-mask))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; fetch-changelog function
@@ -106,49 +78,27 @@
 ;; resource
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defresource changelog-res
-  [conn
-   apptxn-partition
+  [db-spec
    mt-subtype-prefix
    hdr-auth-token
    hdr-error-mask
    base-url
    entity-uri-prefix
-   hdr-apptxn-id
-   hdr-useragent-device-make
-   hdr-useragent-device-os
-   hdr-useragent-device-os-version
    authorized-fn
    entid
-   ent-reqd-attr-entids
-   apptxn-usecase
-   apptxnlog-proc-started-usecase-event
-   apptxnlog-proc-done-success-usecase-event
-   apptxnlog-proc-done-err-occurred-usecase-event
-   &
-   more]
+   ent-reqd-attr-entids]
   :available-media-types (rucore/enumerate-media-types (clmeta/supported-media-types mt-subtype-prefix))
   :available-charsets rumeta/supported-char-sets
   :available-languages rumeta/supported-languages
   :allowed-methods [:get]
   :authorized? authorized-fn
   :handle-ok (fn [ctx] (handle-changelog-get ctx
-                                             conn
-                                             apptxn-partition
-                                             hdr-apptxn-id
-                                             hdr-useragent-device-make
-                                             hdr-useragent-device-os
-                                             hdr-useragent-device-os-version
+                                             db-spec
                                              base-url
                                              entity-uri-prefix
                                              (:uri (:request ctx))
                                              entid
                                              ent-reqd-attr-entids
                                              body-data-out-transform-fn
-                                             apptxn-usecase
-                                             apptxnlog-proc-started-usecase-event
-                                             apptxnlog-proc-done-success-usecase-event
-                                             apptxnlog-proc-done-err-occurred-usecase-event
-                                             (nth more 0)    ;apptxn-async-logger-fn
-                                             (nth more 1)    ;make-apptxn-fn
                                              hdr-auth-token
                                              hdr-error-mask)))
