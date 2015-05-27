@@ -219,7 +219,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    more]
   (let [make-session-fn (nth more 0)
         post-as-do-fn (nth more 1)
-        known-entity-attr (nth more 2)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -260,8 +259,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    save-entity-fn
                    hdr-establish-session
                    make-session-fn
-                   post-as-do-fn
-                   known-entity-attr)))
+                   post-as-do-fn)))
 
 (defn get-invoker
   "Convenience function for handling HTTP GET requests."
@@ -342,7 +340,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         hdr-establish-session (nth more 3)
         make-session-fn (nth more 4)
         post-as-do-fn (nth more 5)
-        known-entity-attr (nth more 6)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
     (try
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))

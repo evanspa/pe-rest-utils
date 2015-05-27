@@ -28,7 +28,7 @@ pe-rest-utils is available from Clojars.  Add the following dependency to your
 `project.clj` file:
 
 ```
-[pe-rest-utils "0.0.7"]
+[pe-rest-utils "0.0.8"]
 ```
 
 ## pe-* Clojure Library Suite
@@ -57,7 +57,7 @@ code that depends on the functionality of the pe-user-* libraries
   a set of helper functions for unit testing web services.
 + **[pe-user-rest](https://github.com/evanspa/pe-user-rest)**: provides a set of
   functions encapsulating an abstraction modeling a user within a REST API
-  and leveraging [Datomic](http://www.datomic.com).
+  and leveraging PostgreSQL.
 + **[pe-apptxn-restsupport](https://github.com/evanspa/pe-apptxn-restsupport)**:
   provides a set of functions implementing the server-side REST layer of the
   PEAppTransaction Logging Framework.
