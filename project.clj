@@ -1,5 +1,5 @@
 (defproject pe-rest-utils "0.0.9-SNAPSHOT"
-  :description "A Clojure library providing a set of helper functions for building REST APIs on top of Datomic."
+  :description "A Clojure library providing a set of helper functions for building REST APIs on top of PostgreSQL."
   :url "https://github.com/evanspa/pe-rest-utils"
   :license {:name "MIT"
             :url "http://opensource.org/licenses/MIT"}
@@ -14,11 +14,11 @@
                  [org.slf4j/slf4j-api "1.7.5"]
                  [liberator "0.12.2"]
                  [environ "1.0.0"]
-                 [pe-core-utils "0.0.10"]
+                 [pe-core-utils "0.0.11"]
                  [pe-jdbc-utils "0.0.2"]]
   :resource-paths ["resources"]
   :codox {:exclude [user]
-          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.8/"
+          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.9/"
           :src-linenum-anchor-prefix "L"}
   :profiles {:dev {:source-paths ["dev"]
                    :plugins [[cider/cider-nrepl "0.9.0-SNAPSHOT"]]
