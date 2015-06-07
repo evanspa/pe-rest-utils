@@ -172,7 +172,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
 
 (defmethod write-res "json"
   [res _ charset]
-  (log/debug "in write-res/json, res: " res)
   (let [^java.nio.charset.Charset charset charset
         res (ucore/instants->rfc7231str-dates res)
         ^java.lang.String json-str (json/write-str res :key-fn #(ucore/keyword->jsonkey %) :escape-slash false)]
