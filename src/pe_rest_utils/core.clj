@@ -341,7 +341,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         make-session-fn (nth more 4)
         post-as-do-fn (nth more 5)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
-    (log/debug "validation-mask: " validation-mask)
     (try
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
         {:unprocessable-entity true
