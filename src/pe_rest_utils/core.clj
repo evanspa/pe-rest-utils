@@ -341,6 +341,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         make-session-fn (nth more 4)
         post-as-do-fn (nth more 5)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
+    (log/debug "validation-mask: " validation-mask)
     (try
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
         {:unprocessable-entity true
@@ -405,30 +406,35 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                        entids
                                                                        new-entity-id
                                                                        transformed-body-data))]
-                            (let [newly-saved-entity (apply save-new-entity-fn save-new-entity-fn-args)]
-                              (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
-                                    transformed-newly-saved-entity (body-data-out-transform-fn version
-                                                                                               conn
-                                                                                               new-entity-id
-                                                                                               newly-saved-entity)
-                                    transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
-                                                                                   new-entity-id)
-                                    transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
-                                                                                      new-entity-id)]
-                                (-> {:status 201
-                                     :location (make-abs-link-href base-url
-                                                                   (str entity-uri
-                                                                        "/"
-                                                                        new-entity-id))
-                                     :entity (write-res transformed-newly-saved-entity
-                                                        accept-format-ind
-                                                        accept-charset)}
-                                    (merge
-                                     (if est-session?
-                                       (let [plaintext-token (make-session-fn version conn new-entity-id)]
-                                         {:auth-token plaintext-token})
-                                       (when (:auth-token ctx)
-                                         {:auth-token (:auth-token ctx)})))))))))))
+                            (try
+                              (let [newly-saved-entity (apply save-new-entity-fn save-new-entity-fn-args)]
+                                (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
+                                      transformed-newly-saved-entity (body-data-out-transform-fn version
+                                                                                                 conn
+                                                                                                 new-entity-id
+                                                                                                 newly-saved-entity)
+                                      transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
+                                                                                     new-entity-id)
+                                      transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
+                                                                                        new-entity-id)]
+                                  (-> {:status 201
+                                       :location (make-abs-link-href base-url
+                                                                     (str entity-uri
+                                                                          "/"
+                                                                          new-entity-id))
+                                       :entity (write-res transformed-newly-saved-entity
+                                                          accept-format-ind
+                                                          accept-charset)}
+                                      (merge
+                                       (if est-session?
+                                         (let [plaintext-token (make-session-fn version conn new-entity-id)]
+                                           {:auth-token plaintext-token})
+                                         (when (:auth-token ctx)
+                                           {:auth-token (:auth-token ctx)}))))))
+                              (catch IllegalArgumentException e
+                                (let [msg-mask (Long/parseLong (.getMessage e))]
+                                  {:unprocessable-entity true
+                                   :error-mask msg-mask}))))))))
                   (post-as-do []
                     (j/with-db-transaction [conn db-spec]
                       (let [resp (post-as-do-fn version
@@ -456,28 +462,34 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                conn
                                                                entids
                                                                transformed-body-data))]
-                        (let [saved-entity (apply save-entity-fn save-entity-fn-args)]
-                          (let [transformed-saved-entity (body-data-out-transform-fn version
-                                                                                     conn
-                                                                                     (last entids)
-                                                                                     saved-entity)
-                                transformed-saved-entity (merge-links-fn transformed-saved-entity
-                                                                         (last entids))
-                                transformed-saved-entity (merge-embedded-fn transformed-saved-entity
-                                                                            (last entids))]
-                            (merge {:status 200
-                                    :location entity-uri
-                                    :entity (write-res transformed-saved-entity
-                                                       accept-format-ind
-                                                       accept-charset)}
-                                   (when (:auth-token ctx)
-                                     {:auth-token (:auth-token ctx)})))))))]
+                        (try
+                          (let [saved-entity (apply save-entity-fn save-entity-fn-args)]
+                            (let [transformed-saved-entity (body-data-out-transform-fn version
+                                                                                       conn
+                                                                                       (last entids)
+                                                                                       saved-entity)
+                                  transformed-saved-entity (merge-links-fn transformed-saved-entity
+                                                                           (last entids))
+                                  transformed-saved-entity (merge-embedded-fn transformed-saved-entity
+                                                                              (last entids))]
+                              (merge {:status 200
+                                      :location entity-uri
+                                      :entity (write-res transformed-saved-entity
+                                                         accept-format-ind
+                                                         accept-charset)}
+                                     (when (:auth-token ctx)
+                                       {:auth-token (:auth-token ctx)}))))
+                          (catch IllegalArgumentException e
+                            (let [msg-mask (Long/parseLong (.getMessage e))]
+                              {:unprocessable-entity true
+                               :error-mask msg-mask}))))))]
             (cond
               (= method :post-as-create) (post-as-create)
               (= method :post-as-do) (post-as-do)
               (= method :put) (put)))))
       (catch Exception e
         (log/error e "Exception caught")
+        (log/info "body-data: " body-data)
         {:err e}))))
 
 (defn get-t
