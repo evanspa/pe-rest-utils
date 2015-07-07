@@ -28,7 +28,7 @@ pe-rest-utils is available from Clojars.  Add the following dependency to your
 `project.clj` file:
 
 ```
-[pe-rest-utils "0.0.16"]
+[pe-rest-utils "0.0.17"]
 ```
 
 ## pe-* Clojure Library Suite

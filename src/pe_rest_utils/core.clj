@@ -440,7 +440,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                 (let [msg-mask (Long/parseLong (.getMessage e))]
                                   {:unprocessable-entity true
                                    :error-mask msg-mask}))
-                              (catch cloure.lang.ExceptionInfo e
+                              (catch clojure.lang.ExceptionInfo e
                                 {(-> e ex-data :cause) true})))))))
                   (post-as-do []
                     (j/with-db-transaction [conn db-spec]
@@ -491,7 +491,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                             (let [msg-mask (Long/parseLong (.getMessage e))]
                               {:unprocessable-entity true
                                :error-mask msg-mask}))
-                          (catch cloure.lang.ExceptionInfo e
+                          (catch clojure.lang.ExceptionInfo e
                             {(-> e ex-data :cause) true})))))]
             (cond
               (= method :post-as-create) (post-as-create)
@@ -584,7 +584,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                                        entity)
                                                            accept-format-ind
                                                            accept-charset)})))))
-          (catch cloure.lang.ExceptionInfo e
+          (catch clojure.lang.ExceptionInfo e
             {(-> e ex-data :cause) true}))))
     (catch Exception e
       (log/error e "Exception caught")
