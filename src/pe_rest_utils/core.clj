@@ -206,6 +206,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    embedded-resources-fn
    links-fn
    entids
+   plaintext-auth-token
    validator-fn
    any-issues-bit
    body-data-in-transform-fn
@@ -249,6 +250,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    embedded-resources-fn
                    links-fn
                    entids
+                   plaintext-auth-token
                    validator-fn
                    any-issues-bit
                    body-data-in-transform-fn
@@ -271,6 +273,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    embedded-resources-fn
    links-fn
    entids
+   plaintext-auth-token
    any-issues-bit
    body-data-out-transform-fn
    fetch-fn
@@ -296,6 +299,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
            embedded-resources-fn
            links-fn
            entids
+           plaintext-auth-token
            any-issues-bit
            body-data-out-transform-fn
            fetch-fn
@@ -327,6 +331,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    embedded-resources-fn
    links-fn
    entids
+   plaintext-auth-token
    validator-fn
    any-issues-bit
    body-data-in-transform-fn
@@ -403,6 +408,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                        version
                                                                        conn
                                                                        entids
+                                                                       plaintext-auth-token
                                                                        new-entity-id
                                                                        transformed-body-data))]
                             (try
@@ -460,6 +466,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                version
                                                                conn
                                                                entids
+                                                               plaintext-auth-token
                                                                transformed-body-data))]
                         (try
                           (let [saved-entity (apply save-entity-fn save-entity-fn-args)]
@@ -505,6 +512,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    embedded-resources-fn
    links-fn
    entids
+   plaintext-auth-token
    any-issues-bit
    body-data-out-transform-fn
    fetch-fn
@@ -544,6 +552,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                              db-spec
                              accept-format-ind
                              entids
+                             plaintext-auth-token
                              if-modified-since-inst
                              if-unmodified-since-inst
                              base-url
@@ -557,6 +566,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                           (assoc-err-mask ctx :error-mask hdr-error-mask))
           (:entity-already-exists ctx) (-> (ring-response {:status 403})
                                            (assoc-err-mask ctx :error-mask hdr-error-mask))
+          (:became-unauthenticatd ctx) (ring-response {:status 401})
           :else (ring-response
                  (merge {}
                         {:status 200}
@@ -582,6 +592,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    hdr-error-mask]
   (cond
     (:err ctx) (ring-response {:status 500})
+    (:became-unauthenticated ctx) (ring-response {:status 401})
     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
     (:entity-already-exists ctx) (-> (ring-response {:status 403})
