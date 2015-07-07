@@ -575,7 +575,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                               (assoc-err-mask ctx :error-mask hdr-error-mask))
               (:entity-already-exists ctx) (-> (ring-response {:status 403})
                                                (assoc-err-mask ctx :error-mask hdr-error-mask))
-              (:became-unauthenticatd ctx) (ring-response {:status 401})
+              (:became-unauthenticated ctx) (ring-response {:status 401})
               :else (ring-response
                      (merge {}
                             {:status 200}
