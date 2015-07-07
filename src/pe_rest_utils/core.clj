@@ -444,24 +444,28 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                 {(-> e ex-data :cause) true})))))))
                   (post-as-do []
                     (j/with-db-transaction [conn db-spec]
-                      (let [resp (post-as-do-fn version
-                                                conn
-                                                base-url
-                                                entity-uri-prefix
-                                                entity-uri
-                                                body-data
-                                                merge-embedded-fn
-                                                merge-links-fn)]
-                        (merge resp
-                               (when-let [body-data (:do-entity resp)]
-                                 {:entity (write-res (body-data-out-transform-fn version
-                                                                                 conn
-                                                                                 nil
-                                                                                 body-data)
-                                                     accept-format-ind
-                                                     accept-charset)})
-                               (when (:auth-token ctx)
-                                 {:auth-token (:auth-token ctx)})))))
+                      (try
+                        (let [resp (post-as-do-fn version
+                                                  conn
+                                                  base-url
+                                                  entity-uri-prefix
+                                                  entity-uri
+                                                  plaintext-auth-token
+                                                  body-data
+                                                  merge-embedded-fn
+                                                  merge-links-fn)]
+                          (merge resp
+                                 (when-let [body-data (:do-entity resp)]
+                                   {:entity (write-res (body-data-out-transform-fn version
+                                                                                   conn
+                                                                                   nil
+                                                                                   body-data)
+                                                       accept-format-ind
+                                                       accept-charset)})
+                                 (when (:auth-token ctx)
+                                   {:auth-token (:auth-token ctx)})))
+                        (catch clojure.lang.ExceptionInfo e
+                          {(-> e ex-data :cause) true}))))
                   (put []
                     (j/with-db-transaction [conn db-spec]
                       (let [save-entity-fn-args (flatten (conj []
