@@ -336,15 +336,15 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    any-issues-bit
    body-data-in-transform-fn
    body-data-out-transform-fn
-   existing-entity-fns
    &
    more]
-  (let [next-entity-id-fn (nth more 0)
-        save-new-entity-fn (nth more 1)
-        save-entity-fn (nth more 2)
-        hdr-establish-session (nth more 3)
-        make-session-fn (nth more 4)
-        post-as-do-fn (nth more 5)
+  (let [existing-entity-fns (nth more 0)
+        next-entity-id-fn (nth more 1)
+        save-new-entity-fn (nth more 2)
+        save-entity-fn (nth more 3)
+        hdr-establish-session (nth more 4)
+        make-session-fn (nth more 5)
+        post-as-do-fn (nth more 6)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
     (try
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
@@ -439,7 +439,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                               (catch IllegalArgumentException e
                                 (let [msg-mask (Long/parseLong (.getMessage e))]
                                   {:unprocessable-entity true
-                                   :error-mask msg-mask}))))))))
+                                   :error-mask msg-mask}))
+                              (catch cloure.lang.ExceptionInfo e
+                                {(-> e ex-data :cause) true})))))))
                   (post-as-do []
                     (j/with-db-transaction [conn db-spec]
                       (let [resp (post-as-do-fn version
@@ -488,7 +490,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                           (catch IllegalArgumentException e
                             (let [msg-mask (Long/parseLong (.getMessage e))]
                               {:unprocessable-entity true
-                               :error-mask msg-mask}))))))]
+                               :error-mask msg-mask}))
+                          (catch cloure.lang.ExceptionInfo e
+                            {(-> e ex-data :cause) true})))))]
             (cond
               (= method :post-as-create) (post-as-create)
               (= method :post-as-do) (post-as-do)
@@ -546,39 +550,42 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
             if-modified-since-inst (when if-modified-since-str
                                      (ucore/rfc7231str->instant if-modified-since-str))
             if-unmodified-since-inst (when if-unmodified-since-str
-                                       (ucore/rfc7231str->instant if-unmodified-since-str))
-            entity (fetch-fn version
-                             ctx
-                             db-spec
-                             accept-format-ind
-                             entids
-                             plaintext-auth-token
-                             if-modified-since-inst
-                             if-unmodified-since-inst
-                             base-url
-                             entity-uri-prefix
-                             entity-uri
-                             merge-embedded-fn
-                             merge-links-fn)]
-        (cond
-          (:err ctx) (ring-response {:status 500})
-          (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                          (assoc-err-mask ctx :error-mask hdr-error-mask))
-          (:entity-already-exists ctx) (-> (ring-response {:status 403})
-                                           (assoc-err-mask ctx :error-mask hdr-error-mask))
-          (:became-unauthenticatd ctx) (ring-response {:status 401})
-          :else (ring-response
-                 (merge {}
-                        {:status 200}
-                        {:headers (merge {}
-                                         (when-let [auth-token (:auth-token ctx)]
-                                           {hdr-auth-token auth-token}))}
-                        (when entity {:body (write-res (body-data-out-transform-fn version
-                                                                                   db-spec
-                                                                                   (last entids)
-                                                                                   entity)
-                                                       accept-format-ind
-                                                       accept-charset)}))))))
+                                       (ucore/rfc7231str->instant if-unmodified-since-str))]
+        (try
+          (let [entity (fetch-fn version
+                                 ctx
+                                 db-spec
+                                 accept-format-ind
+                                 entids
+                                 plaintext-auth-token
+                                 if-modified-since-inst
+                                 if-unmodified-since-inst
+                                 base-url
+                                 entity-uri-prefix
+                                 entity-uri
+                                 merge-embedded-fn
+                                 merge-links-fn)]
+            (cond
+              (:err ctx) (ring-response {:status 500})
+              (:unprocessable-entity ctx) (-> (ring-response {:status 422})
+                                              (assoc-err-mask ctx :error-mask hdr-error-mask))
+              (:entity-already-exists ctx) (-> (ring-response {:status 403})
+                                               (assoc-err-mask ctx :error-mask hdr-error-mask))
+              (:became-unauthenticatd ctx) (ring-response {:status 401})
+              :else (ring-response
+                     (merge {}
+                            {:status 200}
+                            {:headers (merge {}
+                                             (when-let [auth-token (:auth-token ctx)]
+                                               {hdr-auth-token auth-token}))}
+                            (when entity {:body (write-res (body-data-out-transform-fn version
+                                                                                       db-spec
+                                                                                       (last entids)
+                                                                                       entity)
+                                                           accept-format-ind
+                                                           accept-charset)})))))
+          (catch cloure.lang.ExceptionInfo e
+            {(-> e ex-data :cause) true}))))
     (catch Exception e
       (log/error e "Exception caught")
       {:err e})))
