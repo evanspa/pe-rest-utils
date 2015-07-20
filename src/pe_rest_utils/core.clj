@@ -5,6 +5,7 @@
             [pe-rest-utils.meta :as meta]
             [pe-core-utils.core :as ucore]
             [clojure.java.io :as io]
+            [clj-time.coerce :as c]
             [clojure.java.jdbc :as j]
             [pe-jdbc-utils.core :as jcore]
             [clojure.walk :refer [postwalk keywordize-keys]]
@@ -211,7 +212,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    any-issues-bit
    body-data-in-transform-fn
    body-data-out-transform-fn
-   existing-entity-fns
    next-entity-id-fn
    save-new-entity-fn
    save-entity-fn
@@ -220,6 +220,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    more]
   (let [make-session-fn (nth more 0)
         post-as-do-fn (nth more 1)
+        if-unmodified-since-hdr (nth more 2)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -255,13 +256,13 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    any-issues-bit
                    body-data-in-transform-fn
                    body-data-out-transform-fn
-                   existing-entity-fns
                    next-entity-id-fn
                    save-new-entity-fn
                    save-entity-fn
                    hdr-establish-session
                    make-session-fn
-                   post-as-do-fn)))
+                   post-as-do-fn
+                   if-unmodified-since-hdr)))
 
 (defn get-invoker
   "Convenience function for handling HTTP GET requests."
@@ -338,13 +339,13 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    body-data-out-transform-fn
    &
    more]
-  (let [existing-entity-fns (nth more 0)
-        next-entity-id-fn (nth more 1)
-        save-new-entity-fn (nth more 2)
-        save-entity-fn (nth more 3)
-        hdr-establish-session (nth more 4)
-        make-session-fn (nth more 5)
-        post-as-do-fn (nth more 6)
+  (let [next-entity-id-fn (nth more 0)
+        save-new-entity-fn (nth more 1)
+        save-entity-fn (nth more 2)
+        hdr-establish-session (nth more 3)
+        make-session-fn (nth more 4)
+        post-as-do-fn (nth more 5)
+        if-unmodified-since-hdr (nth more 6)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
     (try
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
@@ -377,71 +378,46 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                   saved-entity-entid))
                                     saved-entity))]
           (letfn [(post-as-create []
-                    (let [[does-already-exist already-exists-err-bit]
-                          (when existing-entity-fns
-                            (reduce (fn [[overall-does-already-exist overall-already-exists-err-bit]
-                                         [name-extraction-fn
-                                          get-entities-by-name-fn
-                                          already-exists-err-bit]]
-                                      (if overall-does-already-exist
-                                        [true overall-already-exists-err-bit]
-                                        (when-let [name (name-extraction-fn version transformed-body-data)]
-                                          (let [args (flatten (conj []
-                                                                    version
-                                                                    db-spec
-                                                                    entids
-                                                                    name))
-                                                entities (apply get-entities-by-name-fn args)
-                                                does-already-exist (> (count entities) 0)]
-                                            (if does-already-exist
-                                              [true already-exists-err-bit]
-                                              [false nil])))))
-                                    [false nil]
-                                    existing-entity-fns))]
-                      (if does-already-exist
-                        {:entity-already-exists true
-                         :error-mask (bit-or already-exists-err-bit
-                                             any-issues-bit)}
-                        (j/with-db-transaction [conn db-spec]
-                          (let [new-entity-id (next-entity-id-fn version conn)
-                                save-new-entity-fn-args (flatten (conj []
-                                                                       version
-                                                                       conn
-                                                                       entids
-                                                                       plaintext-auth-token
-                                                                       new-entity-id
-                                                                       transformed-body-data))]
-                            (try
-                              (let [newly-saved-entity (apply save-new-entity-fn save-new-entity-fn-args)]
-                                (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
-                                      transformed-newly-saved-entity (body-data-out-transform-fn version
-                                                                                                 conn
-                                                                                                 new-entity-id
-                                                                                                 newly-saved-entity)
-                                      transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
-                                                                                     new-entity-id)
-                                      transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
-                                                                                        new-entity-id)]
-                                  (-> {:status 201
-                                       :location (make-abs-link-href base-url
-                                                                     (str entity-uri
-                                                                          "/"
-                                                                          new-entity-id))
-                                       :entity (write-res transformed-newly-saved-entity
-                                                          accept-format-ind
-                                                          accept-charset)}
-                                      (merge
-                                       (if est-session?
-                                         (let [plaintext-token (make-session-fn version conn new-entity-id)]
-                                           {:auth-token plaintext-token})
-                                         (when (:auth-token ctx)
-                                           {:auth-token (:auth-token ctx)}))))))
-                              (catch IllegalArgumentException e
-                                (let [msg-mask (Long/parseLong (.getMessage e))]
-                                  {:unprocessable-entity true
-                                   :error-mask msg-mask}))
-                              (catch clojure.lang.ExceptionInfo e
-                                {(-> e ex-data :cause) true})))))))
+                    (j/with-db-transaction [conn db-spec]
+                      (let [new-entity-id (next-entity-id-fn version conn)
+                            save-new-entity-fn-args (flatten (conj []
+                                                                   version
+                                                                   conn
+                                                                   entids
+                                                                   plaintext-auth-token
+                                                                   new-entity-id
+                                                                   transformed-body-data))]
+                        (try
+                          (let [newly-saved-entity (apply save-new-entity-fn save-new-entity-fn-args)]
+                            (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
+                                  transformed-newly-saved-entity (body-data-out-transform-fn version
+                                                                                             conn
+                                                                                             new-entity-id
+                                                                                             newly-saved-entity)
+                                  transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
+                                                                                 new-entity-id)
+                                  transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
+                                                                                    new-entity-id)]
+                              (-> {:status 201
+                                   :location (make-abs-link-href base-url
+                                                                 (str entity-uri
+                                                                      "/"
+                                                                      new-entity-id))
+                                   :entity (write-res transformed-newly-saved-entity
+                                                      accept-format-ind
+                                                      accept-charset)}
+                                  (merge
+                                   (if est-session?
+                                     (let [plaintext-token (make-session-fn version conn new-entity-id)]
+                                       {:auth-token plaintext-token})
+                                     (when (:auth-token ctx)
+                                       {:auth-token (:auth-token ctx)}))))))
+                          (catch IllegalArgumentException e
+                            (let [msg-mask (Long/parseLong (.getMessage e))]
+                              {:unprocessable-entity true
+                               :error-mask msg-mask}))
+                          (catch clojure.lang.ExceptionInfo e
+                            {(-> e ex-data :cause) true})))))
                   (post-as-do []
                     (j/with-db-transaction [conn db-spec]
                       (try
@@ -464,16 +440,23 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                        accept-charset)})
                                  (when (:auth-token ctx)
                                    {:auth-token (:auth-token ctx)})))
+                        (catch IllegalArgumentException e
+                          (let [msg-mask (Long/parseLong (.getMessage e))]
+                            {:unprocessable-entity true
+                             :error-mask msg-mask}))
                         (catch clojure.lang.ExceptionInfo e
                           {(-> e ex-data :cause) true}))))
                   (put []
                     (j/with-db-transaction [conn db-spec]
-                      (let [save-entity-fn-args (flatten (conj []
+                      (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
+                            if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
+                            save-entity-fn-args (flatten (conj []
                                                                version
                                                                conn
                                                                entids
                                                                plaintext-auth-token
-                                                               transformed-body-data))]
+                                                               transformed-body-data
+                                                               if-unmodified-since-val))]
                         (try
                           (let [saved-entity (apply save-entity-fn save-entity-fn-args)]
                             (let [transformed-saved-entity (body-data-out-transform-fn version
@@ -573,8 +556,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
               (:err ctx) (ring-response {:status 500})
               (:unprocessable-entity ctx) (-> (ring-response {:status 422})
                                               (assoc-err-mask ctx :error-mask hdr-error-mask))
-              (:entity-already-exists ctx) (-> (ring-response {:status 403})
-                                               (assoc-err-mask ctx :error-mask hdr-error-mask))
               (:became-unauthenticated ctx) (ring-response {:status 401})
               :else (ring-response
                      (merge {}
@@ -604,10 +585,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   (cond
     (:err ctx) (ring-response {:status 500})
     (:became-unauthenticated ctx) (ring-response {:status 401})
+    (:unmodified-since-check-failed ctx) (ring-response {:status 409})
+    (:entity-not-found ctx) (ring-response {:status 404})
     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
-    (:entity-already-exists ctx) (-> (ring-response {:status 403})
-                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
     :else (ring-response
            (merge {}
                   (when-let [status (:status ctx)] {:status status})
