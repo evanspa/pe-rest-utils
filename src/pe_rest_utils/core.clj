@@ -556,6 +556,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
               (:err ctx) (ring-response {:status 500})
               (:unprocessable-entity ctx) (-> (ring-response {:status 422})
                                               (assoc-err-mask ctx :error-mask hdr-error-mask))
+              (:entity-not-found ctx) (ring-response {:status 404})
               (:became-unauthenticated ctx) (ring-response {:status 401})
               :else (ring-response
                      (merge {}
