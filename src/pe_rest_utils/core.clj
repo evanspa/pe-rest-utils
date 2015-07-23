@@ -388,7 +388,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                    new-entity-id
                                                                    transformed-body-data))]
                         (try
-                          (let [newly-saved-entity (apply save-new-entity-fn save-new-entity-fn-args)]
+                          (let [[_ newly-saved-entity] (apply save-new-entity-fn save-new-entity-fn-args)]
                             (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
                                   transformed-newly-saved-entity (body-data-out-transform-fn version
                                                                                              conn
@@ -461,7 +461,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                transformed-body-data
                                                                if-unmodified-since-val))]
                         (try
-                          (let [saved-entity (apply save-entity-fn save-entity-fn-args)]
+                          (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
                             (let [transformed-saved-entity (body-data-out-transform-fn version
                                                                                        conn
                                                                                        (last entids)
