@@ -421,15 +421,18 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                   (post-as-do []
                     (j/with-db-transaction [conn db-spec]
                       (try
-                        (let [resp (post-as-do-fn version
-                                                  conn
-                                                  base-url
-                                                  entity-uri-prefix
-                                                  entity-uri
-                                                  plaintext-auth-token
-                                                  body-data
-                                                  merge-embedded-fn
-                                                  merge-links-fn)]
+                        (let [post-as-do-fn-args (flatten (conj []
+                                                                version
+                                                                conn
+                                                                entids
+                                                                base-url
+                                                                entity-uri-prefix
+                                                                entity-uri
+                                                                plaintext-auth-token
+                                                                transformed-body-data
+                                                                merge-embedded-fn
+                                                                merge-links-fn))
+                              resp (apply post-as-do-fn post-as-do-fn-args)]
                           (merge resp
                                  (when-let [body-data (:do-entity resp)]
                                    {:entity (write-res (body-data-out-transform-fn version
@@ -486,7 +489,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
               (= method :put) (put)))))
       (catch Exception e
         (log/error e "Exception caught")
-        (log/info "body-data: " body-data)
         {:err e}))))
 
 (defn get-t
