@@ -152,6 +152,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
          meta/char-sets)
         true))))
 
+(defn entity-id-from-uri
+  [uri-str]
+  (Long/parseLong (.substring uri-str (inc (.lastIndexOf uri-str "/")))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Resource Serializers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -351,10 +355,11 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
       (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
         {:unprocessable-entity true
          :error-mask validation-mask}
-        (let [transformed-body-data (body-data-in-transform-fn version
-                                                               db-spec
-                                                               (last entids)
-                                                               body-data)
+        (let [body-data-in-transform-fn-args (flatten (conj []
+                                                            version
+                                                            entids
+                                                            body-data))
+              transformed-body-data (apply body-data-in-transform-fn body-data-in-transform-fn-args)
               merge-links-fn (fn [saved-entity saved-entity-entid]
                                (if links-fn
                                  (assoc saved-entity
@@ -390,10 +395,16 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                         (try
                           (let [[_ newly-saved-entity] (apply save-new-entity-fn save-new-entity-fn-args)]
                             (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
-                                  transformed-newly-saved-entity (body-data-out-transform-fn version
-                                                                                             conn
-                                                                                             new-entity-id
-                                                                                             newly-saved-entity)
+                                  body-data-out-transform-fn-args (flatten (conj []
+                                                                                 version
+                                                                                 conn
+                                                                                 entids
+                                                                                 base-url
+                                                                                 entity-uri-prefix
+                                                                                 entity-uri
+                                                                                 new-entity-id
+                                                                                 newly-saved-entity))
+                                  transformed-newly-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
                                   transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
                                                                                  new-entity-id)
                                   transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
@@ -435,12 +446,18 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                               resp (apply post-as-do-fn post-as-do-fn-args)]
                           (merge resp
                                  (when-let [body-data (:do-entity resp)]
-                                   {:entity (write-res (body-data-out-transform-fn version
-                                                                                   conn
-                                                                                   nil
-                                                                                   body-data)
-                                                       accept-format-ind
-                                                       accept-charset)})
+                                   (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                                        version
+                                                                                        conn
+                                                                                        entids
+                                                                                        base-url
+                                                                                        entity-uri-prefix
+                                                                                        entity-uri
+                                                                                        body-data))
+                                         transformed-body-data-out (apply body-data-out-transform-fn body-data-out-transform-fn-args)]
+                                     {:entity (write-res transformed-body-data-out
+                                                         accept-format-ind
+                                                         accept-charset)}))
                                  (when (:auth-token ctx)
                                    {:auth-token (:auth-token ctx)})))
                         (catch IllegalArgumentException e
@@ -462,10 +479,15 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                if-unmodified-since-val))]
                         (try
                           (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
-                            (let [transformed-saved-entity (body-data-out-transform-fn version
-                                                                                       conn
-                                                                                       (last entids)
-                                                                                       saved-entity)
+                            (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                                 version
+                                                                                 conn
+                                                                                 entids
+                                                                                 base-url
+                                                                                 entity-uri-prefix
+                                                                                 entity-uri
+                                                                                 saved-entity))
+                                  transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
                                   transformed-saved-entity (merge-links-fn transformed-saved-entity
                                                                            (last entids))
                                   transformed-saved-entity (merge-embedded-fn transformed-saved-entity
