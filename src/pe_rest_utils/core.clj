@@ -19,6 +19,7 @@
 (declare write-res)
 (declare put-or-post-t)
 (declare get-t)
+(declare delete-t)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
@@ -268,6 +269,131 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    post-as-do-fn
                    if-unmodified-since-hdr)))
 
+(defn delete-invoker
+  "Convenience function for processing HTTP DELETE calls."
+  [ctx
+   db-spec
+   base-url          ; e.g., https://api.example.com:4040
+   entity-uri-prefix ; e.g., /fp/
+   entity-uri        ; e.g., /fp/users/191491
+   embedded-resources-fn
+   links-fn
+   entids
+   plaintext-auth-token
+   body-data-out-transform-fn
+   delete-entity-fn
+   delete-reason-hdr
+   if-unmodified-since-hdr]
+  (let [{{:keys [media-type lang charset]} :representation} ctx
+        accept-charset-name charset
+        accept-lang lang
+        accept-mt media-type
+        parsed-accept-mt (parse-media-type accept-mt)
+        version (:version parsed-accept-mt)
+        accept-format-ind (:format-ind parsed-accept-mt)
+        accept-charset (get meta/char-sets accept-charset-name)]
+    (delete-t version
+              accept-format-ind
+              accept-charset
+              accept-lang
+              ctx
+              db-spec
+              base-url
+              entity-uri-prefix
+              entity-uri
+              embedded-resources-fn
+              links-fn
+              entids
+              plaintext-auth-token
+              body-data-out-transform-fn
+              delete-entity-fn
+              delete-reason-hdr
+              if-unmodified-since-hdr)))
+
+(defn delete-t
+  "Convenience function for handling HTTP DELETE calls."
+  [version
+   accept-format-ind
+   accept-charset
+   accept-lang
+   ctx
+   db-spec
+   base-url
+   entity-uri-prefix
+   entity-uri
+   embedded-resources-fn
+   links-fn
+   entids
+   plaintext-auth-token
+   body-data-out-transform-fn
+   delete-entity-fn
+   delete-reason-hdr
+   if-unmodified-since-hdr]
+  (try
+    (let [merge-links-fn (fn [saved-entity saved-entity-entid]
+                           (if links-fn
+                             (assoc saved-entity
+                                    :_links
+                                    (links-fn version
+                                              base-url
+                                              entity-uri-prefix
+                                              entity-uri
+                                              saved-entity-entid))
+                             saved-entity))
+          merge-embedded-fn (fn [saved-entity saved-entity-entid]
+                              (if embedded-resources-fn
+                                (assoc saved-entity
+                                       :_embedded
+                                       (embedded-resources-fn version
+                                                              base-url
+                                                              entity-uri-prefix
+                                                              entity-uri
+                                                              db-spec
+                                                              accept-format-ind
+                                                              saved-entity-entid))
+                                saved-entity))]
+      (j/with-db-transaction [conn db-spec]
+        (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
+              delete-reason-str (get-in ctx [:request :headers delete-reason-hdr])
+              delete-reason (when delete-reason-str (Long/parseLong delete-reason-str))
+              if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
+              delete-entity-fn-args (flatten (conj []
+                                                   version
+                                                   conn
+                                                   entids
+                                                   delete-reason
+                                                   plaintext-auth-token
+                                                   if-unmodified-since-val))]
+          (letfn [(write-resp-entity [entity]
+                    (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                         version
+                                                                         conn
+                                                                         entids
+                                                                         base-url
+                                                                         entity-uri-prefix
+                                                                         entity-uri
+                                                                         entity))
+                          transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                          transformed-saved-entity (merge-links-fn transformed-saved-entity
+                                                                   (last entids))]
+                      (-> transformed-saved-entity
+                          (merge-embedded-fn (last entids))
+                          (write-res accept-format-ind accept-charset))))]
+            (try
+              (let [loaded-deleted-entity-result (apply delete-entity-fn delete-entity-fn-args)]
+                (merge {:status 204}
+                       (when (:auth-token ctx)
+                         {:auth-token (:auth-token ctx)})))
+              (catch clojure.lang.ExceptionInfo e
+                (let [cause (-> e ex-data :cause)
+                      latest-entity (-> e ex-data :latest-entity)]
+                  (merge {cause cause}
+                         (when latest-entity
+                           {:latest-entity (write-resp-entity latest-entity)})))))))))
+    (catch Exception e
+      (log/error e "Exception caught")
+      {:err e})))
+
 (defn get-invoker
   "Convenience function for handling HTTP GET requests."
   [ctx
@@ -477,34 +603,38 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                plaintext-auth-token
                                                                transformed-body-data
                                                                if-unmodified-since-val))]
-                        (try
-                          (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
-                            (let [body-data-out-transform-fn-args (flatten (conj []
-                                                                                 version
-                                                                                 conn
-                                                                                 entids
-                                                                                 base-url
-                                                                                 entity-uri-prefix
-                                                                                 entity-uri
-                                                                                 saved-entity))
-                                  transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
-                                  transformed-saved-entity (merge-links-fn transformed-saved-entity
-                                                                           (last entids))
-                                  transformed-saved-entity (merge-embedded-fn transformed-saved-entity
-                                                                              (last entids))]
+                        (letfn [(write-resp-entity [entity]
+                                  (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                                       version
+                                                                                       conn
+                                                                                       entids
+                                                                                       base-url
+                                                                                       entity-uri-prefix
+                                                                                       entity-uri
+                                                                                       entity))
+                                        transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                                        transformed-saved-entity (merge-links-fn transformed-saved-entity
+                                                                                 (last entids))]
+                                    (-> transformed-saved-entity
+                                        (merge-embedded-fn (last entids))
+                                        (write-res accept-format-ind accept-charset))))]
+                          (try
+                            (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
                               (merge {:status 200
                                       :location entity-uri
-                                      :entity (write-res transformed-saved-entity
-                                                         accept-format-ind
-                                                         accept-charset)}
+                                      :entity (write-resp-entity saved-entity)}
                                      (when (:auth-token ctx)
-                                       {:auth-token (:auth-token ctx)}))))
-                          (catch IllegalArgumentException e
-                            (let [msg-mask (Long/parseLong (.getMessage e))]
-                              {:unprocessable-entity true
-                               :error-mask msg-mask}))
-                          (catch clojure.lang.ExceptionInfo e
-                            {(-> e ex-data :cause) true})))))]
+                                       {:auth-token (:auth-token ctx)})))
+                            (catch IllegalArgumentException e
+                              (let [msg-mask (Long/parseLong (.getMessage e))]
+                                {:unprocessable-entity true
+                                 :error-mask msg-mask}))
+                            (catch clojure.lang.ExceptionInfo e
+                              (let [cause (-> e ex-data :cause)
+                                    latest-entity (-> e ex-data :latest-entity)]
+                                (merge {cause cause}
+                                       (when latest-entity
+                                         {:latest-entity (write-resp-entity latest-entity)})))))))))]
             (cond
               (= method :post-as-create) (post-as-create)
               (= method :post-as-do) (post-as-do)
@@ -604,22 +734,25 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   "Returns a Ring response based on the content of the Liberator context.
   hdr-auth-token and hdr-error-mark are the names of the authentication token
   and error mask response headers."
-  [ctx
-   hdr-auth-token
-   hdr-error-mask]
-  (cond
-    (:err ctx) (ring-response {:status 500})
-    (:became-unauthenticated ctx) (ring-response {:status 401})
-    (:unmodified-since-check-failed ctx) (ring-response {:status 409})
-    (:entity-not-found ctx) (ring-response {:status 404})
-    (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                    (assoc-err-mask ctx :error-mask hdr-error-mask))
-    :else (ring-response
-           (merge {}
-                  (when-let [status (:status ctx)] {:status status})
-                  {:headers (merge {}
-                                   (when-let [location (:location ctx)]
-                                     {"location" location})
-                                   (when-let [auth-token (:auth-token ctx)]
-                                     {hdr-auth-token auth-token}))}
-                  (when (:entity ctx) {:body (:entity ctx)})))))
+  ([ctx hdr-auth-token hdr-error-mask]
+   (handle-resp ctx hdr-auth-token hdr-error-mask nil))
+  ([ctx hdr-auth-token hdr-error-mask login-failed-reason-hdr]
+   (cond
+     (:err ctx) (ring-response {:status 500})
+     (:became-unauthenticated ctx) (ring-response {:status 401})
+     (:unmodified-since-check-failed ctx) (ring-response {:status 409
+                                                          :body (:latest-entity ctx)})
+     (:entity-not-found ctx) (ring-response {:status 404})
+     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
+                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
+     :else (ring-response
+            (merge {}
+                   (when-let [status (:status ctx)] {:status status})
+                   {:headers (merge {}
+                                    (when-let [location (:location ctx)]
+                                      {"location" location})
+                                    (when-let [auth-token (:auth-token ctx)]
+                                      {hdr-auth-token auth-token})
+                                    (when-let [login-failed-reason (:login-failed-reason ctx)]
+                                      {login-failed-reason-hdr login-failed-reason}))}
+                   (when (:entity ctx) {:body (:entity ctx)}))))))
