@@ -405,11 +405,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    links-fn
    entids
    plaintext-auth-token
-   any-issues-bit
    body-data-out-transform-fn
    fetch-fn
-   hdr-auth-token
-   hdr-error-mask]
+   if-modified-since-hdr
+   resp-gen-fn]
   (let [{{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -431,11 +430,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
            links-fn
            entids
            plaintext-auth-token
-           any-issues-bit
            body-data-out-transform-fn
            fetch-fn
-           hdr-auth-token
-           hdr-error-mask)))
+           if-modified-since-hdr
+           resp-gen-fn)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Templates
@@ -658,11 +656,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    links-fn
    entids
    plaintext-auth-token
-   any-issues-bit
    body-data-out-transform-fn
    fetch-fn
-   hdr-auth-token
-   hdr-error-mask]
+   if-modified-since-hdr
+   resp-gen-fn]
   (try
     (let [merge-links-fn (fn [fetched-entity fetched-entity-entid]
                            (if links-fn
@@ -686,46 +683,36 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                               accept-format-ind
                                                               fetched-entity-entid))
                                 fetched-entity))]
-      (let [if-modified-since-str (get-in ctx [:request :headers "if-modified-since"])
-            if-unmodified-since-str (get-in ctx [:request :headers "if-unmodified-since"])
-            if-modified-since-inst (when if-modified-since-str
-                                     (ucore/rfc7231str->instant if-modified-since-str))
-            if-unmodified-since-inst (when if-unmodified-since-str
-                                       (ucore/rfc7231str->instant if-unmodified-since-str))]
-        (try
-          (let [entity (fetch-fn version
-                                 ctx
-                                 db-spec
-                                 accept-format-ind
-                                 entids
-                                 plaintext-auth-token
-                                 if-modified-since-inst
-                                 if-unmodified-since-inst
-                                 base-url
-                                 entity-uri-prefix
-                                 entity-uri
-                                 merge-embedded-fn
-                                 merge-links-fn)]
-            (cond
-              (:err ctx) (ring-response {:status 500})
-              (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                              (assoc-err-mask ctx :error-mask hdr-error-mask))
-              (:entity-not-found ctx) (ring-response {:status 404})
-              (:became-unauthenticated ctx) (ring-response {:status 401})
-              :else (ring-response
-                     (merge {}
-                            {:status 200}
-                            {:headers (merge {}
-                                             (when-let [auth-token (:auth-token ctx)]
-                                               {hdr-auth-token auth-token}))}
-                            (when entity {:body (write-res (body-data-out-transform-fn version
-                                                                                       db-spec
-                                                                                       (last entids)
-                                                                                       entity)
-                                                           accept-format-ind
-                                                           accept-charset)})))))
-          (catch clojure.lang.ExceptionInfo e
-            {(-> e ex-data :cause) true}))))
+      (let [if-modified-since-epoch-str (get-in ctx [:request :headers if-modified-since-hdr])
+            if-modified-since-val (when if-modified-since-epoch-str (c/from-long (Long/parseLong if-modified-since-epoch-str)))
+            fetch-entity-fn-args (flatten (conj []
+                                                version
+                                                db-spec
+                                                entids
+                                                plaintext-auth-token
+                                                if-modified-since-val))]
+        (letfn [(write-resp-entity [entity]
+                  (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                       version
+                                                                       db-spec
+                                                                       entids
+                                                                       base-url
+                                                                       entity-uri-prefix
+                                                                       entity-uri
+                                                                       entity))
+                        transformed-fetched-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                        transformed-fetched-entity (merge-links-fn transformed-fetched-entity
+                                                                   (last entids))]
+                    (-> transformed-fetched-entity
+                        (merge-embedded-fn (last entids))
+                        (write-res accept-format-ind accept-charset))))]
+          (let [[_ loaded-entity] (apply fetch-fn fetch-entity-fn-args)]
+            (resp-gen-fn
+             (merge {:status 200
+                     :location entity-uri
+                     :entity (write-resp-entity loaded-entity)}
+                    (when (:auth-token ctx)
+                      {:auth-token (:auth-token ctx)})))))))
     (catch Exception e
       (log/error e "Exception caught")
       {:err e})))
