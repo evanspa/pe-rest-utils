@@ -732,26 +732,22 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   ([ctx hdr-auth-token hdr-error-mask]
    (handle-resp ctx hdr-auth-token hdr-error-mask nil))
   ([ctx hdr-auth-token hdr-error-mask login-failed-reason-hdr]
-   (let [resp
-         (cond
-           (:err ctx) (ring-response {:status 500})
-           (:became-unauthenticated ctx) (ring-response {:status 401})
-           (:unmodified-since-check-failed ctx) (ring-response {:status 409
-                                                                :body (:latest-entity ctx)})
-           (:entity-not-found ctx) (ring-response {:status 404})
-           (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                           (assoc-err-mask ctx :error-mask hdr-error-mask))
-           :else (ring-response
-                  (merge {}
-                         (when-let [status (:status ctx)] {:status status})
-                         {:headers (merge {}
-                                          (when-let [location (:location ctx)]
-                                            {"location" location})
-                                          (when-let [auth-token (:auth-token ctx)]
-                                            {hdr-auth-token auth-token})
-                                          (when-let [login-failed-reason (:login-failed-reason ctx)]
-                                            {login-failed-reason-hdr login-failed-reason}))}
-                         (when (:entity ctx) {:body (:entity ctx)}))))]
-     (log/debug "resp: " resp)
-     resp
-     )))
+   (cond
+     (:err ctx) (ring-response {:status 500})
+     (:became-unauthenticated ctx) (ring-response {:status 401})
+     (:unmodified-since-check-failed ctx) (ring-response {:status 409
+                                                          :body (:latest-entity ctx)})
+     (:entity-not-found ctx) (ring-response {:status 404})
+     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
+                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
+     :else (ring-response
+            (merge {}
+                   (when-let [status (:status ctx)] {:status status})
+                   {:headers (merge {}
+                                    (when-let [location (:location ctx)]
+                                      {"location" location})
+                                    (when-let [auth-token (:auth-token ctx)]
+                                      {hdr-auth-token auth-token})
+                                    (when-let [login-failed-reason (:login-failed-reason ctx)]
+                                      {login-failed-reason-hdr login-failed-reason}))}
+                   (when (:entity ctx) {:body (:entity ctx)}))))))
