@@ -5,6 +5,7 @@
             [pe-rest-utils.meta :as meta]
             [pe-core-utils.core :as ucore]
             [clojure.java.io :as io]
+            [clj-time.core :as t]
             [clj-time.coerce :as c]
             [clojure.java.jdbc :as j]
             [pe-jdbc-utils.core :as jcore]
@@ -408,6 +409,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    body-data-out-transform-fn
    fetch-fn
    if-modified-since-hdr
+   updated-at-keyword
    resp-gen-fn]
   (let [{{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
@@ -433,6 +435,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
            body-data-out-transform-fn
            fetch-fn
            if-modified-since-hdr
+           updated-at-keyword
            resp-gen-fn)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -659,6 +662,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    body-data-out-transform-fn
    fetch-fn
    if-modified-since-hdr
+   updated-at-keyword
    resp-gen-fn]
   (try
     (let [merge-links-fn (fn [fetched-entity fetched-entity-entid]
@@ -706,13 +710,17 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                     (-> transformed-fetched-entity
                         (merge-embedded-fn (last entids))
                         (write-res accept-format-ind accept-charset))))]
-          (let [[_ loaded-entity] (apply fetch-fn fetch-entity-fn-args)]
+          (let [[_ loaded-entity] (apply fetch-fn fetch-entity-fn-args)
+                updated-at (get loaded-entity updated-at-keyword)]
             (resp-gen-fn
-             (merge {:status 200
-                     :location entity-uri
-                     :entity (write-resp-entity loaded-entity)}
-                    (when (:auth-token ctx)
-                      {:auth-token (:auth-token ctx)})))))))
+             (merge
+              {:location entity-uri}
+              (when (:auth-token ctx)
+                {:auth-token (:auth-token ctx)})
+              (if (or (nil? if-modified-since-val)
+                      (t/after? updated-at if-modified-since-val))
+                {:status 200 :entity (write-resp-entity loaded-entity)}
+                {:status 304})))))))
     (catch Exception e
       (log/error e "Exception caught")
       {:err e})))
@@ -724,22 +732,26 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   ([ctx hdr-auth-token hdr-error-mask]
    (handle-resp ctx hdr-auth-token hdr-error-mask nil))
   ([ctx hdr-auth-token hdr-error-mask login-failed-reason-hdr]
-   (cond
-     (:err ctx) (ring-response {:status 500})
-     (:became-unauthenticated ctx) (ring-response {:status 401})
-     (:unmodified-since-check-failed ctx) (ring-response {:status 409
-                                                          :body (:latest-entity ctx)})
-     (:entity-not-found ctx) (ring-response {:status 404})
-     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
-     :else (ring-response
-            (merge {}
-                   (when-let [status (:status ctx)] {:status status})
-                   {:headers (merge {}
-                                    (when-let [location (:location ctx)]
-                                      {"location" location})
-                                    (when-let [auth-token (:auth-token ctx)]
-                                      {hdr-auth-token auth-token})
-                                    (when-let [login-failed-reason (:login-failed-reason ctx)]
-                                      {login-failed-reason-hdr login-failed-reason}))}
-                   (when (:entity ctx) {:body (:entity ctx)}))))))
+   (let [resp
+         (cond
+           (:err ctx) (ring-response {:status 500})
+           (:became-unauthenticated ctx) (ring-response {:status 401})
+           (:unmodified-since-check-failed ctx) (ring-response {:status 409
+                                                                :body (:latest-entity ctx)})
+           (:entity-not-found ctx) (ring-response {:status 404})
+           (:unprocessable-entity ctx) (-> (ring-response {:status 422})
+                                           (assoc-err-mask ctx :error-mask hdr-error-mask))
+           :else (ring-response
+                  (merge {}
+                         (when-let [status (:status ctx)] {:status status})
+                         {:headers (merge {}
+                                          (when-let [location (:location ctx)]
+                                            {"location" location})
+                                          (when-let [auth-token (:auth-token ctx)]
+                                            {hdr-auth-token auth-token})
+                                          (when-let [login-failed-reason (:login-failed-reason ctx)]
+                                            {login-failed-reason-hdr login-failed-reason}))}
+                         (when (:entity ctx) {:body (:entity ctx)}))))]
+     (log/debug "resp: " resp)
+     resp
+     )))
