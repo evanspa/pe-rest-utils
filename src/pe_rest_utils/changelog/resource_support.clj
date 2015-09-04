@@ -12,9 +12,7 @@
 
 (declare body-data-out-transform-fn)
 (declare save-new-entity-fn)
-(declare apptxn-async-logger)
-(declare make-apptxn)
-(declare fetch-changelog)
+(declare load-changelog-fn)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Handler
@@ -25,49 +23,48 @@
    db-spec
    base-url
    entity-uri-prefix
-   entity-uri
-   entid
-   ent-reqd-attrs-and-vals
-   body-data-out-transform-fn
-   hdr-auth-token
-   hdr-error-mask]
+   changelog-uri
+   user-id
+   plaintext-auth-token
+   embedded-resources-fn
+   links-fn
+   if-modified-since-hdr
+   resp-gen-fn
+   tables-and-updated-at-cols
+   ;changelog-transform-out-fns
+   ]
   (rucore/get-invoker ctx
                       db-spec
                       base-url
                       entity-uri-prefix
-                      entity-uri
-                      nil
-                      nil
-                      [entid]
-                      nil
+                      changelog-uri
+                      embedded-resources-fn
+                      links-fn
+                      [user-id]
+                      plaintext-auth-token
                       body-data-out-transform-fn
+                      ;load-changelog-fn
                       (fn [version
-                           ctx
                            db-spec
-                           accept-format-ind
-                           entids ; will ignore
-                           if-modified-since-inst ; will ignore
-                           if-unmodified-since-inst ; will ignore
-                           base-url
-                           entity-uri-prefix
-                           entity-uri
-                           merge-embedded-fn ; will ignore
-                           merge-links-fn]   ; will ignore
-                        (fetch-changelog version
-                                         ctx
-                                         db-spec
-                                         accept-format-ind
-                                         ent-reqd-attrs-and-vals
-                                         base-url
-                                         entity-uri-prefix
-                                         entity-uri))
-                      hdr-auth-token
-                      hdr-error-mask))
+                           user-id
+                           plaintext-auth-token
+                           if-modified-since]
+                        (load-changelog-fn version
+                                           db-spec
+                                           user-id
+                                           plaintext-auth-token
+                                           if-modified-since
+                                           tables-and-updated-at-cols
+                                           ;changelog-transform-out-fns
+                                           ))
+                      if-modified-since-hdr
+                      :changelog/updated-at
+                      resp-gen-fn))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; fetch-changelog function
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmulti-by-version fetch-changelog clmeta/v001)
+(defmulti-by-version load-changelog-fn clmeta/v001)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; body-data transformation functions
@@ -82,23 +79,40 @@
    mt-subtype-prefix
    hdr-auth-token
    hdr-error-mask
+   auth-scheme
+   auth-scheme-param-name
    base-url
    entity-uri-prefix
+   user-id
+   embedded-resources-fn
+   links-fn
+   if-modified-since-hdr
    authorized-fn
-   entid
-   ent-reqd-attr-entids]
+   get-plaintext-auth-token-fn
+   tables-and-updated-at-cols
+   ;changelog-transform-out-fns
+   ]
   :available-media-types (rucore/enumerate-media-types (clmeta/supported-media-types mt-subtype-prefix))
   :available-charsets rumeta/supported-char-sets
   :available-languages rumeta/supported-languages
   :allowed-methods [:get]
   :authorized? authorized-fn
-  :handle-ok (fn [ctx] (handle-changelog-get ctx
-                                             db-spec
-                                             base-url
-                                             entity-uri-prefix
-                                             (:uri (:request ctx))
-                                             entid
-                                             ent-reqd-attr-entids
-                                             body-data-out-transform-fn
-                                             hdr-auth-token
-                                             hdr-error-mask)))
+  :respond-with-entity? true
+  :multiple-representations? false
+  :handle-ok (fn [ctx]
+               (handle-changelog-get ctx
+                                     db-spec
+                                     base-url
+                                     entity-uri-prefix
+                                     (:uri (:request ctx))
+                                     user-id
+                                     (get-plaintext-auth-token-fn ctx
+                                                                  auth-scheme
+                                                                  auth-scheme-param-name)
+                                     embedded-resources-fn
+                                     links-fn
+                                     if-modified-since-hdr
+                                     #(rucore/handle-resp % hdr-auth-token hdr-error-mask)
+                                     tables-and-updated-at-cols
+                                        ;changelog-transform-out-fns
+                                     )))

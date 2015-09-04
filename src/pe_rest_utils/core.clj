@@ -675,7 +675,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                               entity-uri
                                               fetched-entity-entid))
                              fetched-entity))
-          merge-embedded-fn (fn [fetched-entity fetched-entity-entid]
+          merge-embedded-fn (fn [fetched-entity fetched-entity-entid modified-since]
                               (if embedded-resources-fn
                                 (assoc fetched-entity
                                        :_embedded
@@ -685,7 +685,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                               entity-uri
                                                               db-spec
                                                               accept-format-ind
-                                                              fetched-entity-entid))
+                                                              fetched-entity-entid
+                                                              modified-since))
                                 fetched-entity))]
       (let [if-modified-since-epoch-str (get-in ctx [:request :headers if-modified-since-hdr])
             if-modified-since-val (when if-modified-since-epoch-str (c/from-long (Long/parseLong if-modified-since-epoch-str)))
@@ -708,7 +709,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                         transformed-fetched-entity (merge-links-fn transformed-fetched-entity
                                                                    (last entids))]
                     (-> transformed-fetched-entity
-                        (merge-embedded-fn (last entids))
+                        (merge-embedded-fn (last entids) if-modified-since-val)
                         (write-res accept-format-ind accept-charset))))]
           (let [[_ loaded-entity] (apply fetch-fn fetch-entity-fn-args)
                 updated-at (get loaded-entity updated-at-keyword)]
