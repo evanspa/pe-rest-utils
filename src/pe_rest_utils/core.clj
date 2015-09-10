@@ -17,6 +17,8 @@
             [environ.core :refer [env]])
   (:import [java.net URL]))
 
+(def ^:dynamic *retry-after* nil)
+
 (declare write-res)
 (declare put-or-post-t)
 (declare get-t)
@@ -330,70 +332,72 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    delete-entity-fn
    delete-reason-hdr
    if-unmodified-since-hdr]
-  (try
-    (let [merge-links-fn (fn [saved-entity saved-entity-entid]
-                           (if links-fn
-                             (assoc saved-entity
-                                    :_links
-                                    (links-fn version
-                                              base-url
-                                              entity-uri-prefix
-                                              entity-uri
-                                              saved-entity-entid))
-                             saved-entity))
-          merge-embedded-fn (fn [saved-entity saved-entity-entid]
-                              (if embedded-resources-fn
-                                (assoc saved-entity
-                                       :_embedded
-                                       (embedded-resources-fn version
-                                                              base-url
-                                                              entity-uri-prefix
-                                                              entity-uri
-                                                              db-spec
-                                                              accept-format-ind
-                                                              saved-entity-entid))
-                                saved-entity))]
-      (j/with-db-transaction [conn db-spec]
-        (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
-              delete-reason-str (get-in ctx [:request :headers delete-reason-hdr])
-              delete-reason (when delete-reason-str (Long/parseLong delete-reason-str))
-              if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
-              delete-entity-fn-args (flatten (conj []
-                                                   version
-                                                   conn
-                                                   entids
-                                                   delete-reason
-                                                   plaintext-auth-token
-                                                   if-unmodified-since-val))]
-          (letfn [(write-resp-entity [entity]
-                    (let [body-data-out-transform-fn-args (flatten (conj []
-                                                                         version
-                                                                         conn
-                                                                         entids
-                                                                         base-url
-                                                                         entity-uri-prefix
-                                                                         entity-uri
-                                                                         entity))
-                          transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
-                          transformed-saved-entity (merge-links-fn transformed-saved-entity
-                                                                   (last entids))]
-                      (-> transformed-saved-entity
-                          (merge-embedded-fn (last entids))
-                          (write-res accept-format-ind accept-charset))))]
-            (try
-              (let [loaded-deleted-entity-result (apply delete-entity-fn delete-entity-fn-args)]
+  (any-t-if-not-busy
+   #(try
+      (let [merge-links-fn (fn [saved-entity saved-entity-entid]
+                             (if links-fn
+                               (assoc saved-entity
+                                      :_links
+                                      (links-fn version
+                                                base-url
+                                                entity-uri-prefix
+                                                entity-uri
+                                                saved-entity-entid))
+                               saved-entity))
+            merge-embedded-fn (fn [saved-entity saved-entity-entid]
+                                (if embedded-resources-fn
+                                  (assoc saved-entity
+                                         :_embedded
+                                         (embedded-resources-fn version
+                                                                base-url
+                                                                entity-uri-prefix
+                                                                entity-uri
+                                                                db-spec
+                                                                accept-format-ind
+                                                                saved-entity-entid))
+                                  saved-entity))]
+        (j/with-db-transaction [conn db-spec]
+          (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
+                delete-reason-str (get-in ctx [:request :headers delete-reason-hdr])
+                delete-reason (when delete-reason-str (Long/parseLong delete-reason-str))
+                if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
+                delete-entity-fn-args (flatten (conj []
+                                                     version
+                                                     conn
+                                                     entids
+                                                     delete-reason
+                                                     plaintext-auth-token
+                                                     if-unmodified-since-val))]
+            (letfn [(write-resp-entity [entity]
+                      (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                           version
+                                                                           conn
+                                                                           entids
+                                                                           base-url
+                                                                           entity-uri-prefix
+                                                                           entity-uri
+                                                                           entity))
+                            transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                            transformed-saved-entity (merge-links-fn transformed-saved-entity
+                                                                     (last entids))]
+                        (-> transformed-saved-entity
+                            (merge-embedded-fn (last entids))
+                            (write-res accept-format-ind accept-charset))))]
+              (try
+                (apply delete-entity-fn delete-entity-fn-args)
                 (merge {:status 204}
                        (when (:auth-token ctx)
-                         {:auth-token (:auth-token ctx)})))
-              (catch clojure.lang.ExceptionInfo e
-                (let [cause (-> e ex-data :cause)
-                      latest-entity (-> e ex-data :latest-entity)]
-                  (merge {cause cause}
-                         (when latest-entity
-                           {:latest-entity (write-resp-entity latest-entity)})))))))))
-    (catch Exception e
-      (log/error e "Exception caught")
-      {:err e})))
+                         {:auth-token (:auth-token ctx)}))
+                (catch clojure.lang.ExceptionInfo e
+                  (let [cause (-> e ex-data :cause)
+                        latest-entity (-> e ex-data :latest-entity)]
+                    (merge {cause cause}
+                           (when latest-entity
+                             {:latest-entity (write-resp-entity latest-entity)})))))))))
+      (catch Exception e
+        (log/error e "Exception caught")
+        {:err e}))
+   (fn [] {})))
 
 (defn get-invoker
   "Convenience function for handling HTTP GET requests."
@@ -478,171 +482,173 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         post-as-do-fn (nth more 5)
         if-unmodified-since-hdr (nth more 6)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
-    (try
-      (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
-        {:unprocessable-entity true
-         :error-mask validation-mask}
-        (let [body-data-in-transform-fn-args (flatten (conj []
-                                                            version
-                                                            entids
-                                                            body-data))
-              transformed-body-data (apply body-data-in-transform-fn body-data-in-transform-fn-args)
-              merge-links-fn (fn [saved-entity saved-entity-entid]
-                               (if links-fn
-                                 (assoc saved-entity
-                                        :_links
-                                        (links-fn version
-                                                  base-url
-                                                  entity-uri-prefix
-                                                  entity-uri
-                                                  saved-entity-entid))
-                                 saved-entity))
-              merge-embedded-fn (fn [saved-entity saved-entity-entid]
-                                  (if embedded-resources-fn
-                                    (assoc saved-entity
-                                           :_embedded
-                                           (embedded-resources-fn version
-                                                                  base-url
-                                                                  entity-uri-prefix
-                                                                  entity-uri
-                                                                  db-spec
-                                                                  accept-format-ind
-                                                                  saved-entity-entid))
-                                    saved-entity))]
-          (letfn [(post-as-create []
-                    (j/with-db-transaction [conn db-spec]
-                      (let [new-entity-id (next-entity-id-fn version conn)
-                            save-new-entity-fn-args (flatten (conj []
-                                                                   version
-                                                                   conn
-                                                                   entids
-                                                                   plaintext-auth-token
-                                                                   new-entity-id
-                                                                   transformed-body-data))]
-                        (try
-                          (let [[_ newly-saved-entity] (apply save-new-entity-fn save-new-entity-fn-args)]
-                            (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
-                                  body-data-out-transform-fn-args (flatten (conj []
-                                                                                 version
-                                                                                 conn
-                                                                                 entids
-                                                                                 base-url
-                                                                                 entity-uri-prefix
-                                                                                 entity-uri
-                                                                                 new-entity-id
-                                                                                 newly-saved-entity))
-                                  transformed-newly-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
-                                  transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
-                                                                                 new-entity-id)
-                                  transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
-                                                                                    new-entity-id)]
-                              (-> {:status 201
-                                   :location (make-abs-link-href base-url
-                                                                 (str entity-uri
-                                                                      "/"
-                                                                      new-entity-id))
-                                   :entity (write-res transformed-newly-saved-entity
-                                                      accept-format-ind
-                                                      accept-charset)}
-                                  (merge
-                                   (if est-session?
-                                     (let [plaintext-token (make-session-fn version conn new-entity-id)]
-                                       {:auth-token plaintext-token})
-                                     (when (:auth-token ctx)
-                                       {:auth-token (:auth-token ctx)}))))))
-                          (catch IllegalArgumentException e
-                            (let [msg-mask (Long/parseLong (.getMessage e))]
-                              {:unprocessable-entity true
-                               :error-mask msg-mask}))
-                          (catch clojure.lang.ExceptionInfo e
-                            {(-> e ex-data :cause) true})))))
-                  (post-as-do []
-                    (j/with-db-transaction [conn db-spec]
-                      (try
-                        (let [post-as-do-fn-args (flatten (conj []
-                                                                version
-                                                                conn
-                                                                entids
-                                                                base-url
-                                                                entity-uri-prefix
-                                                                entity-uri
-                                                                plaintext-auth-token
-                                                                transformed-body-data
-                                                                merge-embedded-fn
-                                                                merge-links-fn))
-                              resp (apply post-as-do-fn post-as-do-fn-args)]
-                          (merge resp
-                                 (when-let [body-data (:do-entity resp)]
-                                   (let [body-data-out-transform-fn-args (flatten (conj []
-                                                                                        version
-                                                                                        conn
-                                                                                        entids
-                                                                                        base-url
-                                                                                        entity-uri-prefix
-                                                                                        entity-uri
-                                                                                        body-data))
-                                         transformed-body-data-out (apply body-data-out-transform-fn body-data-out-transform-fn-args)]
-                                     {:entity (write-res transformed-body-data-out
-                                                         accept-format-ind
-                                                         accept-charset)}))
-                                 (when (:auth-token ctx)
-                                   {:auth-token (:auth-token ctx)})))
-                        (catch IllegalArgumentException e
-                          (let [msg-mask (Long/parseLong (.getMessage e))]
-                            {:unprocessable-entity true
-                             :error-mask msg-mask}))
-                        (catch clojure.lang.ExceptionInfo e
-                          {(-> e ex-data :cause) true}))))
-                  (put []
-                    (j/with-db-transaction [conn db-spec]
-                      (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
-                            if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
-                            save-entity-fn-args (flatten (conj []
-                                                               version
-                                                               conn
-                                                               entids
-                                                               plaintext-auth-token
-                                                               transformed-body-data
-                                                               if-unmodified-since-val))]
-                        (letfn [(write-resp-entity [entity]
-                                  (let [body-data-out-transform-fn-args (flatten (conj []
-                                                                                       version
-                                                                                       conn
-                                                                                       entids
-                                                                                       base-url
-                                                                                       entity-uri-prefix
-                                                                                       entity-uri
-                                                                                       entity))
-                                        transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
-                                        transformed-saved-entity (merge-links-fn transformed-saved-entity
-                                                                                 (last entids))]
-                                    (-> transformed-saved-entity
-                                        (merge-embedded-fn (last entids))
-                                        (write-res accept-format-ind accept-charset))))]
+    (any-t-if-not-busy
+     #(try
+        (if (and any-issues-bit (pos? (bit-and validation-mask any-issues-bit)))
+          {:unprocessable-entity true
+           :error-mask validation-mask}
+          (let [body-data-in-transform-fn-args (flatten (conj []
+                                                              version
+                                                              entids
+                                                              body-data))
+                transformed-body-data (apply body-data-in-transform-fn body-data-in-transform-fn-args)
+                merge-links-fn (fn [saved-entity saved-entity-entid]
+                                 (if links-fn
+                                   (assoc saved-entity
+                                          :_links
+                                          (links-fn version
+                                                    base-url
+                                                    entity-uri-prefix
+                                                    entity-uri
+                                                    saved-entity-entid))
+                                   saved-entity))
+                merge-embedded-fn (fn [saved-entity saved-entity-entid]
+                                    (if embedded-resources-fn
+                                      (assoc saved-entity
+                                             :_embedded
+                                             (embedded-resources-fn version
+                                                                    base-url
+                                                                    entity-uri-prefix
+                                                                    entity-uri
+                                                                    db-spec
+                                                                    accept-format-ind
+                                                                    saved-entity-entid))
+                                      saved-entity))]
+            (letfn [(post-as-create []
+                      (j/with-db-transaction [conn db-spec]
+                        (let [new-entity-id (next-entity-id-fn version conn)
+                              save-new-entity-fn-args (flatten (conj []
+                                                                     version
+                                                                     conn
+                                                                     entids
+                                                                     plaintext-auth-token
+                                                                     new-entity-id
+                                                                     transformed-body-data))]
                           (try
-                            (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
-                              (merge {:status 200
-                                      :location entity-uri
-                                      :entity (write-resp-entity saved-entity)}
-                                     (when (:auth-token ctx)
-                                       {:auth-token (:auth-token ctx)})))
+                            (let [[_ newly-saved-entity] (apply save-new-entity-fn save-new-entity-fn-args)]
+                              (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
+                                    body-data-out-transform-fn-args (flatten (conj []
+                                                                                   version
+                                                                                   conn
+                                                                                   entids
+                                                                                   base-url
+                                                                                   entity-uri-prefix
+                                                                                   entity-uri
+                                                                                   new-entity-id
+                                                                                   newly-saved-entity))
+                                    transformed-newly-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                                    transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
+                                                                                   new-entity-id)
+                                    transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
+                                                                                      new-entity-id)]
+                                (-> {:status 201
+                                     :location (make-abs-link-href base-url
+                                                                   (str entity-uri
+                                                                        "/"
+                                                                        new-entity-id))
+                                     :entity (write-res transformed-newly-saved-entity
+                                                        accept-format-ind
+                                                        accept-charset)}
+                                    (merge
+                                     (if est-session?
+                                       (let [plaintext-token (make-session-fn version conn new-entity-id)]
+                                         {:auth-token plaintext-token})
+                                       (when (:auth-token ctx)
+                                         {:auth-token (:auth-token ctx)}))))))
                             (catch IllegalArgumentException e
                               (let [msg-mask (Long/parseLong (.getMessage e))]
                                 {:unprocessable-entity true
                                  :error-mask msg-mask}))
                             (catch clojure.lang.ExceptionInfo e
-                              (let [cause (-> e ex-data :cause)
-                                    latest-entity (-> e ex-data :latest-entity)]
-                                (merge {cause cause}
-                                       (when latest-entity
-                                         {:latest-entity (write-resp-entity latest-entity)})))))))))]
-            (cond
-              (= method :post-as-create) (post-as-create)
-              (= method :post-as-do) (post-as-do)
-              (= method :put) (put)))))
-      (catch Exception e
-        (log/error e "Exception caught")
-        {:err e}))))
+                              {(-> e ex-data :cause) true})))))
+                    (post-as-do []
+                      (j/with-db-transaction [conn db-spec]
+                        (try
+                          (let [post-as-do-fn-args (flatten (conj []
+                                                                  version
+                                                                  conn
+                                                                  entids
+                                                                  base-url
+                                                                  entity-uri-prefix
+                                                                  entity-uri
+                                                                  plaintext-auth-token
+                                                                  transformed-body-data
+                                                                  merge-embedded-fn
+                                                                  merge-links-fn))
+                                resp (apply post-as-do-fn post-as-do-fn-args)]
+                            (merge resp
+                                   (when-let [body-data (:do-entity resp)]
+                                     (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                                          version
+                                                                                          conn
+                                                                                          entids
+                                                                                          base-url
+                                                                                          entity-uri-prefix
+                                                                                          entity-uri
+                                                                                          body-data))
+                                           transformed-body-data-out (apply body-data-out-transform-fn body-data-out-transform-fn-args)]
+                                       {:entity (write-res transformed-body-data-out
+                                                           accept-format-ind
+                                                           accept-charset)}))
+                                   (when (:auth-token ctx)
+                                     {:auth-token (:auth-token ctx)})))
+                          (catch IllegalArgumentException e
+                            (let [msg-mask (Long/parseLong (.getMessage e))]
+                              {:unprocessable-entity true
+                               :error-mask msg-mask}))
+                          (catch clojure.lang.ExceptionInfo e
+                            {(-> e ex-data :cause) true}))))
+                    (put []
+                      (j/with-db-transaction [conn db-spec]
+                        (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
+                              if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
+                              save-entity-fn-args (flatten (conj []
+                                                                 version
+                                                                 conn
+                                                                 entids
+                                                                 plaintext-auth-token
+                                                                 transformed-body-data
+                                                                 if-unmodified-since-val))]
+                          (letfn [(write-resp-entity [entity]
+                                    (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                                         version
+                                                                                         conn
+                                                                                         entids
+                                                                                         base-url
+                                                                                         entity-uri-prefix
+                                                                                         entity-uri
+                                                                                         entity))
+                                          transformed-saved-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                                          transformed-saved-entity (merge-links-fn transformed-saved-entity
+                                                                                   (last entids))]
+                                      (-> transformed-saved-entity
+                                          (merge-embedded-fn (last entids))
+                                          (write-res accept-format-ind accept-charset))))]
+                            (try
+                              (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
+                                (merge {:status 200
+                                        :location entity-uri
+                                        :entity (write-resp-entity saved-entity)}
+                                       (when (:auth-token ctx)
+                                         {:auth-token (:auth-token ctx)})))
+                              (catch IllegalArgumentException e
+                                (let [msg-mask (Long/parseLong (.getMessage e))]
+                                  {:unprocessable-entity true
+                                   :error-mask msg-mask}))
+                              (catch clojure.lang.ExceptionInfo e
+                                (let [cause (-> e ex-data :cause)
+                                      latest-entity (-> e ex-data :latest-entity)]
+                                  (merge {cause cause}
+                                         (when latest-entity
+                                           {:latest-entity (write-resp-entity latest-entity)})))))))))]
+              (cond
+                (= method :post-as-create) (post-as-create)
+                (= method :post-as-do) (post-as-do)
+                (= method :put) (put)))))
+        (catch Exception e
+          (log/error e "Exception caught")
+          {:err e}))
+     (fn [] {}))))
 
 (defn get-t
   "Convenience function for handling HTTP GET requests."
@@ -664,67 +670,78 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    if-modified-since-hdr
    updated-at-keyword
    resp-gen-fn]
-  (try
-    (let [merge-links-fn (fn [fetched-entity fetched-entity-entid]
-                           (if links-fn
-                             (assoc fetched-entity
-                                    :_links
-                                    (links-fn version
-                                              base-url
-                                              entity-uri-prefix
-                                              entity-uri
-                                              fetched-entity-entid))
-                             fetched-entity))
-          merge-embedded-fn (fn [fetched-entity fetched-entity-entid modified-since]
-                              (if embedded-resources-fn
-                                (assoc fetched-entity
-                                       :_embedded
-                                       (embedded-resources-fn version
-                                                              base-url
-                                                              entity-uri-prefix
-                                                              entity-uri
-                                                              db-spec
-                                                              accept-format-ind
-                                                              fetched-entity-entid
-                                                              modified-since))
-                                fetched-entity))]
-      (let [if-modified-since-epoch-str (get-in ctx [:request :headers if-modified-since-hdr])
-            if-modified-since-val (when if-modified-since-epoch-str (c/from-long (Long/parseLong if-modified-since-epoch-str)))
-            fetch-entity-fn-args (flatten (conj []
-                                                version
-                                                db-spec
-                                                entids
-                                                plaintext-auth-token
-                                                if-modified-since-val))]
-        (letfn [(write-resp-entity [entity]
-                  (let [body-data-out-transform-fn-args (flatten (conj []
-                                                                       version
-                                                                       db-spec
-                                                                       entids
-                                                                       base-url
-                                                                       entity-uri-prefix
-                                                                       entity-uri
-                                                                       entity))
-                        transformed-fetched-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
-                        transformed-fetched-entity (merge-links-fn transformed-fetched-entity
-                                                                   (last entids))]
-                    (-> transformed-fetched-entity
-                        (merge-embedded-fn (last entids) if-modified-since-val)
-                        (write-res accept-format-ind accept-charset))))]
-          (let [[_ loaded-entity] (apply fetch-fn fetch-entity-fn-args)
-                updated-at (get loaded-entity updated-at-keyword)]
-            (resp-gen-fn
-             (merge
-              {:location entity-uri}
-              (when (:auth-token ctx)
-                {:auth-token (:auth-token ctx)})
-              (if (or (nil? if-modified-since-val)
-                      (t/after? updated-at if-modified-since-val))
-                {:status 200 :entity (write-resp-entity loaded-entity)}
-                {:status 304})))))))
-    (catch Exception e
-      (log/error e "Exception caught")
-      {:err e})))
+  (any-t-if-not-busy
+   #(try
+      (let [merge-links-fn (fn [fetched-entity fetched-entity-entid]
+                             (if links-fn
+                               (assoc fetched-entity
+                                      :_links
+                                      (links-fn version
+                                                base-url
+                                                entity-uri-prefix
+                                                entity-uri
+                                                fetched-entity-entid))
+                               fetched-entity))
+            merge-embedded-fn (fn [fetched-entity fetched-entity-entid modified-since]
+                                (if embedded-resources-fn
+                                  (assoc fetched-entity
+                                         :_embedded
+                                         (embedded-resources-fn version
+                                                                base-url
+                                                                entity-uri-prefix
+                                                                entity-uri
+                                                                db-spec
+                                                                accept-format-ind
+                                                                fetched-entity-entid
+                                                                modified-since))
+                                  fetched-entity))]
+        (let [if-modified-since-epoch-str (get-in ctx [:request :headers if-modified-since-hdr])
+              if-modified-since-val (when if-modified-since-epoch-str (c/from-long (Long/parseLong if-modified-since-epoch-str)))
+              fetch-entity-fn-args (flatten (conj []
+                                                  version
+                                                  db-spec
+                                                  entids
+                                                  plaintext-auth-token
+                                                  if-modified-since-val))]
+          (letfn [(write-resp-entity [entity]
+                    (let [body-data-out-transform-fn-args (flatten (conj []
+                                                                         version
+                                                                         db-spec
+                                                                         entids
+                                                                         base-url
+                                                                         entity-uri-prefix
+                                                                         entity-uri
+                                                                         entity))
+                          transformed-fetched-entity (apply body-data-out-transform-fn body-data-out-transform-fn-args)
+                          transformed-fetched-entity (merge-links-fn transformed-fetched-entity
+                                                                     (last entids))]
+                      (-> transformed-fetched-entity
+                          (merge-embedded-fn (last entids) if-modified-since-val)
+                          (write-res accept-format-ind accept-charset))))]
+            (let [loaded-entity-result (apply fetch-fn fetch-entity-fn-args)]
+              (resp-gen-fn
+               (if (not (nil? loaded-entity-result))
+                 (let [[_ loaded-entity] loaded-entity-result
+                       updated-at (get loaded-entity updated-at-keyword)]
+                   (merge
+                    {:location entity-uri}
+                    (when (:auth-token ctx)
+                      {:auth-token (:auth-token ctx)})
+                    (if (or (nil? if-modified-since-val)
+                            (t/after? updated-at if-modified-since-val))
+                      {:status 200 :entity (write-resp-entity loaded-entity)}
+                      {:status 304})))
+                 {:status 404}))))))
+      (catch Exception e
+        (log/error e "Exception caught")
+        {:err e}))
+   #(resp-gen-fn {})))
+
+(defn any-t-if-not-busy
+  [t-f busy-f]
+  (if (nil? *retry-after*)
+    (t-f)
+    (busy-f)))
 
 (defn handle-resp
   "Returns a Ring response based on the content of the Liberator context.
@@ -734,6 +751,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    (handle-resp ctx hdr-auth-token hdr-error-mask nil))
   ([ctx hdr-auth-token hdr-error-mask login-failed-reason-hdr]
    (cond
+     *retry-after* (ring-response
+                    {:status 503
+                     :headers {"retry-after" (ucore/instant->rfc7231str (c/to-date *retry-after*))}})
      (:err ctx) (ring-response {:status 500})
      (:became-unauthenticated ctx) (ring-response {:status 401})
      (:unmodified-since-check-failed ctx) (ring-response {:status 409
