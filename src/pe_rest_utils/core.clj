@@ -20,6 +20,7 @@
 (def ^:dynamic *retry-after* nil)
 
 (declare write-res)
+(declare any-t-if-not-busy)
 (declare put-or-post-t)
 (declare get-t)
 (declare delete-t)
