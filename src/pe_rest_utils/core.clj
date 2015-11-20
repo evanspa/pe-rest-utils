@@ -231,6 +231,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         post-as-do-fn (nth more 1)
         if-unmodified-since-hdr (nth more 2)
         err-notification-fn (nth more 3)
+        err-logging-body-data-transform-fn (nth more 4)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -273,7 +274,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    make-session-fn
                    post-as-do-fn
                    if-unmodified-since-hdr
-                   err-notification-fn)))
+                   err-notification-fn
+                   err-logging-body-data-transform-fn)))
 
 (defn delete-invoker
   "Convenience function for processing HTTP DELETE calls."
