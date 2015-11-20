@@ -405,26 +405,22 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                           ", accept-format-ind: " accept-format-ind
                           ", accept-charset: " accept-charset
                           ", accept-lang: " accept-lang
-                          ", method: " method
                           ", base-url: " base-url
                           ", entity-uri-prefix: " entity-uri-prefix
                           ", entity-uri: " entity-uri
                           ", entids: " entids
-                          ", if-modified-sincd-hdr: " if-modified-since-hdr
-                          ", updated-at-keyword: " updated-at-keywrod ")"))
+                          ", if-unmodified-sincd-hdr: " if-unmodified-since-hdr ")"))
         (when err-notification-fn
           (err-notification-fn {:exception e
                                 :params [version
                                          accept-format-ind
                                          accept-charset
                                          accept-lang
-                                         method
                                          base-url
                                          entity-uri-prefix
                                          entity-uri
                                          entids
-                                         if-modified-since-hdr
-                                         updated-at-keyword]}))
+                                         if-unmodified-since-hdr]}))
         {:err e}))
    (fn [] {})))
 
@@ -689,8 +685,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                             ", entity-uri-prefix: " entity-uri-prefix
                             ", entity-uri: " entity-uri
                             ", entids: " entids
-                            ", if-modified-sincd-hdr: " if-modified-since-hdr
-                            ", updated-at-keyword: " updated-at-keywrod ")"))
+                            ", if-unmodified-sincd-hdr: " if-unmodified-since-hdr ")"))
           (when err-notification-fn
             (err-notification-fn {:exception e
                                   :params [version
@@ -703,8 +698,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                            entity-uri-prefix
                                            entity-uri
                                            entids
-                                           if-modified-since-hdr
-                                           updated-at-keyword]}))
+                                           if-unmodified-since-hdr]}))
           {:err e}))
      (fn [] {}))))
 
@@ -801,7 +795,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                           ", entity-uri: " entity-uri
                           ", entids: " entids
                           ", if-modified-sincd-hdr: " if-modified-since-hdr
-                          ", updated-at-keyword: " updated-at-keywrod ")"))
+                          ", updated-at-keyword: " updated-at-keyword ")"))
         (when err-notification-fn
           (err-notification-fn {:exception e
                                 :params [version
