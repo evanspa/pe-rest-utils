@@ -230,6 +230,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   (let [make-session-fn (nth more 0)
         post-as-do-fn (nth more 1)
         if-unmodified-since-hdr (nth more 2)
+        err-notification-fn (nth more 3)
         {{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -271,7 +272,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    hdr-establish-session
                    make-session-fn
                    post-as-do-fn
-                   if-unmodified-since-hdr)))
+                   if-unmodified-since-hdr
+                   err-notification-fn)))
 
 (defn delete-invoker
   "Convenience function for processing HTTP DELETE calls."
@@ -287,7 +289,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    body-data-out-transform-fn
    delete-entity-fn
    delete-reason-hdr
-   if-unmodified-since-hdr]
+   if-unmodified-since-hdr
+   err-notification-fn]
   (let [{{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -312,7 +315,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
               body-data-out-transform-fn
               delete-entity-fn
               delete-reason-hdr
-              if-unmodified-since-hdr)))
+              if-unmodified-since-hdr
+              err-notification-fn)))
 
 (defn delete-t
   "Convenience function for handling HTTP DELETE calls."
@@ -332,7 +336,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    body-data-out-transform-fn
    delete-entity-fn
    delete-reason-hdr
-   if-unmodified-since-hdr]
+   if-unmodified-since-hdr
+   err-notification-fn]
   (any-t-if-not-busy
    #(try
       (let [merge-links-fn (fn [saved-entity saved-entity-entid]
@@ -396,7 +401,30 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                            (when latest-entity
                              {:latest-entity (write-resp-entity latest-entity)})))))))))
       (catch Exception e
-        (log/error e "Exception caught")
+        (log/error e (str "Exception in delete-t. (version: " version
+                          ", accept-format-ind: " accept-format-ind
+                          ", accept-charset: " accept-charset
+                          ", accept-lang: " accept-lang
+                          ", method: " method
+                          ", base-url: " base-url
+                          ", entity-uri-prefix: " entity-uri-prefix
+                          ", entity-uri: " entity-uri
+                          ", entids: " entids
+                          ", if-modified-sincd-hdr: " if-modified-since-hdr
+                          ", updated-at-keyword: " updated-at-keywrod ")"))
+        (when err-notification-fn
+          (err-notification-fn {:exception e
+                                :params [version
+                                         accept-format-ind
+                                         accept-charset
+                                         accept-lang
+                                         method
+                                         base-url
+                                         entity-uri-prefix
+                                         entity-uri
+                                         entids
+                                         if-modified-since-hdr
+                                         updated-at-keyword]}))
         {:err e}))
    (fn [] {})))
 
@@ -415,7 +443,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    fetch-fn
    if-modified-since-hdr
    updated-at-keyword
-   resp-gen-fn]
+   resp-gen-fn
+   err-notification-fn]
   (let [{{:keys [media-type lang charset]} :representation} ctx
         accept-charset-name charset
         accept-lang lang
@@ -441,7 +470,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
            fetch-fn
            if-modified-since-hdr
            updated-at-keyword
-           resp-gen-fn)))
+           resp-gen-fn
+           err-notification-fn)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Templates
@@ -482,6 +512,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         make-session-fn (nth more 4)
         post-as-do-fn (nth more 5)
         if-unmodified-since-hdr (nth more 6)
+        err-notification-fn (nth more 7)
+        err-logging-body-data-transform-fn (nth more 8)
         validation-mask (if validator-fn (validator-fn version body-data) 0)]
     (any-t-if-not-busy
      #(try
@@ -647,7 +679,32 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                 (= method :post-as-do) (post-as-do)
                 (= method :put) (put)))))
         (catch Exception e
-          (log/error e "Exception caught")
+          (log/error e (str "Exception in put-or-post-t. (version: " version
+                            ", body-data: " (err-logging-body-data-transform-fn body-data)
+                            ", accept-format-ind: " accept-format-ind
+                            ", accept-charset: " accept-charset
+                            ", accept-lang: " accept-lang
+                            ", method: " method
+                            ", base-url: " base-url
+                            ", entity-uri-prefix: " entity-uri-prefix
+                            ", entity-uri: " entity-uri
+                            ", entids: " entids
+                            ", if-modified-sincd-hdr: " if-modified-since-hdr
+                            ", updated-at-keyword: " updated-at-keywrod ")"))
+          (when err-notification-fn
+            (err-notification-fn {:exception e
+                                  :params [version
+                                           (err-logging-body-data-transform-fn body-data)
+                                           accept-format-ind
+                                           accept-charset
+                                           accept-lang
+                                           method
+                                           base-url
+                                           entity-uri-prefix
+                                           entity-uri
+                                           entids
+                                           if-modified-since-hdr
+                                           updated-at-keyword]}))
           {:err e}))
      (fn [] {}))))
 
@@ -670,7 +727,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    fetch-fn
    if-modified-since-hdr
    updated-at-keyword
-   resp-gen-fn]
+   resp-gen-fn
+   err-notification-fn]
   (any-t-if-not-busy
    #(try
       (let [merge-links-fn (fn [fetched-entity fetched-entity-entid]
@@ -734,7 +792,28 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                       {:status 304})))
                  {:status 404}))))))
       (catch Exception e
-        (log/error e "Exception caught")
+        (log/error e (str "Exception in get-t. (version: " version
+                          ", accept-format-ind: " accept-format-ind
+                          ", accept-charset: " accept-charset
+                          ", accept-lang: " accept-lang
+                          ", base-url: " base-url
+                          ", entity-uri-prefix: " entity-uri-prefix
+                          ", entity-uri: " entity-uri
+                          ", entids: " entids
+                          ", if-modified-sincd-hdr: " if-modified-since-hdr
+                          ", updated-at-keyword: " updated-at-keywrod ")"))
+        (when err-notification-fn
+          (err-notification-fn {:exception e
+                                :params [version
+                                         accept-format-ind
+                                         accept-charset
+                                         accept-lang
+                                         base-url
+                                         entity-uri-prefix
+                                         entity-uri
+                                         entids
+                                         if-modified-since-hdr
+                                         updated-at-keyword]}))
         {:err e}))
    #(resp-gen-fn {})))
 
