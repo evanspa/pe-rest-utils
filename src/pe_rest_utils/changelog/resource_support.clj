@@ -31,8 +31,7 @@
    if-modified-since-hdr
    resp-gen-fn
    tables-and-updated-at-cols
-   ;changelog-transform-out-fns
-   ]
+   err-notification-fn]
   (rucore/get-invoker ctx
                       db-spec
                       base-url
@@ -43,7 +42,6 @@
                       [user-id]
                       plaintext-auth-token
                       body-data-out-transform-fn
-                      ;load-changelog-fn
                       (fn [version
                            db-spec
                            user-id
@@ -54,12 +52,11 @@
                                            user-id
                                            plaintext-auth-token
                                            if-modified-since
-                                           tables-and-updated-at-cols
-                                           ;changelog-transform-out-fns
-                                           ))
+                                           tables-and-updated-at-cols))
                       if-modified-since-hdr
                       :changelog/updated-at
-                      resp-gen-fn))
+                      resp-gen-fn
+                      err-notification-fn))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; fetch-changelog function
@@ -90,8 +87,7 @@
    authorized-fn
    get-plaintext-auth-token-fn
    tables-and-updated-at-cols
-   ;changelog-transform-out-fns
-   ]
+   err-notification-fn]
   :available-media-types (rucore/enumerate-media-types (clmeta/supported-media-types mt-subtype-prefix))
   :available-charsets rumeta/supported-char-sets
   :available-languages rumeta/supported-languages
@@ -114,5 +110,4 @@
                                      if-modified-since-hdr
                                      #(rucore/handle-resp % hdr-auth-token hdr-error-mask)
                                      tables-and-updated-at-cols
-                                        ;changelog-transform-out-fns
-                                     )))
+                                     err-notification-fn)))
