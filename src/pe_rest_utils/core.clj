@@ -753,6 +753,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
         (let [if-modified-since-epoch-str (get-in ctx [:request :headers if-modified-since-hdr])
               if-modified-since-val (when if-modified-since-epoch-str (c/from-long (Long/parseLong if-modified-since-epoch-str)))
               fetch-entity-fn-args (flatten (conj []
+                                                  ctx
                                                   version
                                                   db-spec
                                                   entids
