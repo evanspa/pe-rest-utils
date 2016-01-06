@@ -27,7 +27,8 @@
 ;; 0.0.1 load-changelog-fn function
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmethod load-changelog-fn clmeta/v001
-  [version
+  [ctx
+   version
    db-spec
    user-id
    plaintext-auth-token
