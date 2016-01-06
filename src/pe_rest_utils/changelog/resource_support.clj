@@ -42,12 +42,14 @@
                       [user-id]
                       plaintext-auth-token
                       body-data-out-transform-fn
-                      (fn [version
+                      (fn [ctx
+                           version
                            db-spec
                            user-id
                            plaintext-auth-token
                            if-modified-since]
-                        (load-changelog-fn version
+                        (load-changelog-fn ctx
+                                           version
                                            db-spec
                                            user-id
                                            plaintext-auth-token
