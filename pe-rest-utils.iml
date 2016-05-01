@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module cursive.leiningen.project.LeiningenProjectsManager.displayName="pe-rest-utils:0.0.38-SNAPSHOT" cursive.leiningen.project.LeiningenProjectsManager.isLeinModule="true" type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="false">
+    <output url="file://$MODULE_DIR$/target/classes" />
+    <output-test url="file://$MODULE_DIR$/target/classes" />
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/resources" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/dev-resources" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/dev" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="Leiningen: ch.qos.logback/logback-classic:1.0.13" level="project" />
+    <orderEntry type="library" name="Leiningen: ch.qos.logback/logback-core:1.0.13" level="project" />
+    <orderEntry type="library" name="Leiningen: cider/cider-nrepl:0.9.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Leiningen: clj-time:0.8.0" level="project" />
+    <orderEntry type="library" name="Leiningen: clojure-complete:0.2.4" level="project" />
+    <orderEntry type="library" name="Leiningen: environ:1.0.0" level="project" />
+    <orderEntry type="library" name="Leiningen: hiccup:1.0.3" level="project" />
+    <orderEntry type="library" name="Leiningen: joda-time:2.3" level="project" />
+    <orderEntry type="library" name="Leiningen: liberator:0.12.2" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/clojure:1.6.0" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/data.codec:0.1.0" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/data.csv:0.1.2" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/data.json:0.2.5" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/java.classpath:0.2.2" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/java.jdbc:0.3.6" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/tools.logging:0.3.1" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/tools.namespace:0.2.7" level="project" />
+    <orderEntry type="library" name="Leiningen: org.clojure/tools.nrepl:0.2.7" level="project" />
+    <orderEntry type="library" name="Leiningen: org.postgresql/postgresql:9.4-1201-jdbc41" level="project" />
+    <orderEntry type="library" name="Leiningen: org.slf4j/slf4j-api:1.7.5" level="project" />
+    <orderEntry type="library" name="Leiningen: org.tcrawley/dynapath:0.2.3" level="project" />
+    <orderEntry type="library" name="Leiningen: pe-core-utils:0.0.11" level="project" />
+    <orderEntry type="library" name="Leiningen: pe-jdbc-utils:0.0.16" level="project" />
+  </component>
+</module>

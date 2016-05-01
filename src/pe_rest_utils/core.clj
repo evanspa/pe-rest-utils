@@ -28,14 +28,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helper functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn assoc-err-mask
-  "Associates hdr-error-mask as a response header in the Ring response map,
-  ring-resp-map.  The value used is entry found in ctx keyed on ctx-keyword."
-  [ring-resp-map ctx ctx-keyword hdr-error-mask]
-  (assoc-in ring-resp-map
-            [:response :headers hdr-error-mask]
-            (str (ctx-keyword ctx))))
-
 (defn content-type
   "Returns a content type string of the form: type/subtype-vXXX;charset=XXX"
   ([mt-type mt-subtype version format-ind charset-name]
@@ -227,55 +219,58 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    hdr-establish-session
    &
    more]
-  (let [make-session-fn (nth more 0)
-        post-as-do-fn (nth more 1)
-        if-unmodified-since-hdr (nth more 2)
-        err-notification-fn (nth more 3)
-        err-logging-body-data-transform-fn (nth more 4)
-        {{:keys [media-type lang charset]} :representation} ctx
-        accept-charset-name charset
-        accept-lang lang
-        accept-mt media-type
-        parsed-accept-mt (parse-media-type accept-mt)
-        accept-format-ind (:format-ind parsed-accept-mt)
-        content-type (get-in ctx [:request :headers "content-type"])
-        content-lang (get-in ctx [:request :headers "content-language"])
-        parsed-content-type (parse-media-type content-type)
-        content-type-charset-name (:charset parsed-content-type)
-        version (:version parsed-content-type)
-        body (get-in ctx [:request :body])
-        accept-charset (get meta/char-sets accept-charset-name)
-        content-type-charset (get meta/char-sets content-type-charset-name)
-        body-data (read-res parsed-content-type body content-type-charset)
-        body-data (keywordize-keys body-data)]
-    (put-or-post-t version
-                   body-data
-                   accept-format-ind
-                   accept-charset
-                   accept-lang
-                   ctx
-                   method
-                   db-spec
-                   base-url
-                   entity-uri-prefix
-                   entity-uri
-                   embedded-resources-fn
-                   links-fn
-                   entids
-                   plaintext-auth-token
-                   validator-fn
-                   any-issues-bit
-                   body-data-in-transform-fn
-                   body-data-out-transform-fn
-                   next-entity-id-fn
-                   save-new-entity-fn
-                   save-entity-fn
-                   hdr-establish-session
-                   make-session-fn
-                   post-as-do-fn
-                   if-unmodified-since-hdr
-                   err-notification-fn
-                   err-logging-body-data-transform-fn)))
+  (try
+    (let [make-session-fn (nth more 0)
+          post-as-do-fn (nth more 1)
+          if-unmodified-since-hdr (nth more 2)
+          err-notification-fn (nth more 3)
+          err-logging-body-data-transform-fn (nth more 4)
+          {{:keys [media-type lang charset]} :representation} ctx
+          accept-charset-name (if charset charset "UTF-8")
+          accept-lang (if lang lang "en-us")
+          accept-mt media-type
+          parsed-accept-mt (parse-media-type accept-mt)
+          accept-format-ind (:format-ind parsed-accept-mt)
+          content-type (get-in ctx [:request :headers "content-type"])
+          content-lang (get-in ctx [:request :headers "content-language"])
+          parsed-content-type (parse-media-type content-type)
+          content-type-charset-name (:charset parsed-content-type)
+          version (:version parsed-content-type)
+          body (get-in ctx [:request :body])
+          accept-charset (get meta/char-sets accept-charset-name)
+          content-type-charset (get meta/char-sets content-type-charset-name)
+          body-data (read-res parsed-content-type body content-type-charset)
+          body-data (keywordize-keys body-data)]
+      (put-or-post-t version
+                     body-data
+                     accept-format-ind
+                     accept-charset
+                     accept-lang
+                     ctx
+                     method
+                     db-spec
+                     base-url
+                     entity-uri-prefix
+                     entity-uri
+                     embedded-resources-fn
+                     links-fn
+                     entids
+                     plaintext-auth-token
+                     validator-fn
+                     any-issues-bit
+                     body-data-in-transform-fn
+                     body-data-out-transform-fn
+                     next-entity-id-fn
+                     save-new-entity-fn
+                     save-entity-fn
+                     hdr-establish-session
+                     make-session-fn
+                     post-as-do-fn
+                     if-unmodified-since-hdr
+                     err-notification-fn
+                     err-logging-body-data-transform-fn))
+    (catch Exception e
+      (log/error e "exception in p-invoker"))))
 
 (defn delete-invoker
   "Convenience function for processing HTTP DELETE calls."
@@ -836,8 +831,9 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
      (:unmodified-since-check-failed ctx) (ring-response {:status 409
                                                           :body (:latest-entity ctx)})
      (:entity-not-found ctx) (ring-response {:status 404})
-     (:unprocessable-entity ctx) (-> (ring-response {:status 422})
-                                     (assoc-err-mask ctx :error-mask hdr-error-mask))
+     (:unprocessable-entity ctx) (ring-response
+                                  {:status 422
+                                   :headers {hdr-error-mask (str (:error-mask ctx))}})
      :else (ring-response
             (merge {}
                    (when-let [status (:status ctx)] {:status status})
