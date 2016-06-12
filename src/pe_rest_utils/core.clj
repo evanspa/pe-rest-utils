@@ -682,7 +682,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                             ", entity-uri-prefix: " entity-uri-prefix
                             ", entity-uri: " entity-uri
                             ", entids: " entids
-                            ", if-unmodified-sincd-hdr: " if-unmodified-since-hdr ")"))
+                            ", if-unmodified-since-hdr: " if-unmodified-since-hdr ")"))
           (when err-notification-fn
             (err-notification-fn {:exception e
                                   :params [version
