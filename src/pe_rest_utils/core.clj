@@ -289,7 +289,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    if-unmodified-since-hdr
    err-notification-fn]
   (let [{{:keys [media-type lang charset]} :representation} ctx
-        accept-charset-name charset
+        accept-charset-name (if charset charset "UTF-8")
         accept-lang lang
         accept-mt media-type
         parsed-accept-mt (parse-media-type accept-mt)
@@ -439,7 +439,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
    resp-gen-fn
    err-notification-fn]
   (let [{{:keys [media-type lang charset]} :representation} ctx
-        accept-charset-name charset
+        accept-charset-name (if charset charset "UTF-8")
         accept-lang lang
         accept-mt media-type
         parsed-accept-mt (parse-media-type accept-mt)
@@ -586,7 +586,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                 {:unprocessable-entity true
                                  :error-mask msg-mask}))
                             (catch clojure.lang.ExceptionInfo e
-                              {(-> e ex-data :cause) true})))))
+                              {:err e})))))
                     (post-as-do []
                       (j/with-db-transaction [conn db-spec]
                         (try
@@ -623,7 +623,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                               {:unprocessable-entity true
                                :error-mask msg-mask}))
                           (catch clojure.lang.ExceptionInfo e
-                            {(-> e ex-data :cause) true}))))
+                            {:err e}))))
                     (put []
                       (j/with-db-transaction [conn db-spec]
                         (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
