@@ -394,9 +394,11 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                 (catch clojure.lang.ExceptionInfo e
                   (let [cause (-> e ex-data :cause)
                         latest-entity (-> e ex-data :latest-entity)]
-                    (merge {cause cause}
-                           (when latest-entity
-                             {:latest-entity (write-resp-entity latest-entity)})))))))))
+                    (if (= cause :became-unauthenticated)
+                      {:became-unauthenticated true}
+                      (merge {cause cause}
+                             (when latest-entity
+                               {:latest-entity (write-resp-entity latest-entity)}))))))))))
       (catch Exception e
         (log/error e (str "Exception in delete-t. (version: " version
                           ", accept-format-ind: " accept-format-ind
@@ -586,7 +588,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                 {:unprocessable-entity true
                                  :error-mask msg-mask}))
                             (catch clojure.lang.ExceptionInfo e
-                              {:err e})))))
+                              (let [cause (-> e ex-data :cause)]
+                                (if (= cause :became-unauthenticated)
+                                  {:became-unauthenticated true}
+                                  {:err e})))))))
                     (post-as-do []
                       (j/with-db-transaction [conn db-spec]
                         (try
@@ -623,7 +628,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                               {:unprocessable-entity true
                                :error-mask msg-mask}))
                           (catch clojure.lang.ExceptionInfo e
-                            {:err e}))))
+                            (let [cause (-> e ex-data :cause)]
+                              (if (= cause :became-unauthenticated)
+                                {:became-unauthenticated true}
+                                {:err e}))))))
                     (put []
                       (j/with-db-transaction [conn db-spec]
                         (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
@@ -664,9 +672,11 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                               (catch clojure.lang.ExceptionInfo e
                                 (let [cause (-> e ex-data :cause)
                                       latest-entity (-> e ex-data :latest-entity)]
-                                  (merge {cause cause}
-                                         (when latest-entity
-                                           {:latest-entity (write-resp-entity latest-entity)})))))))))]
+                                  (if (= cause :became-unauthenticated)
+                                    {:became-unauthenticated true}
+                                    (merge {cause cause}
+                                           (when latest-entity
+                                             {:latest-entity (write-resp-entity latest-entity)}))))))))))]
               (cond
                 (= method :post-as-create) (post-as-create)
                 (= method :post-as-do) (post-as-do)
@@ -783,6 +793,11 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                       {:status 200 :entity (write-resp-entity loaded-entity)}
                       {:status 304})))
                  {:status 404}))))))
+      (catch clojure.lang.ExceptionInfo e
+        (let [cause (-> e ex-data :cause)]
+          (if (= cause :became-unauthenticated)
+            {:became-unauthenticated true}
+            {:err e})))
       (catch Exception e
         (log/error e (str "Exception in get-t. (version: " version
                           ", accept-format-ind: " accept-format-ind
