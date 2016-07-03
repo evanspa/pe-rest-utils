@@ -1,4 +1,4 @@
-(defproject pe-rest-utils "0.0.41-SNAPSHOT"
+(defproject pe-rest-utils "0.0.41"
   :description "A Clojure library providing a set of helper functions for building REST APIs on top of PostgreSQL."
   :url "https://github.com/evanspa/pe-rest-utils"
   :license {:name "MIT"
