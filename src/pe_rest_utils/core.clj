@@ -834,9 +834,17 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
   "Returns a Ring response based on the content of the Liberator context.
   hdr-auth-token and hdr-error-mark are the names of the authentication token
   and error mask response headers."
-  ([ctx hdr-auth-token hdr-error-mask]
-   (handle-resp ctx hdr-auth-token hdr-error-mask nil))
-  ([ctx hdr-auth-token hdr-error-mask login-failed-reason-hdr]
+  ([ctx
+    hdr-auth-token
+    hdr-error-mask]
+   (handle-resp ctx
+                hdr-auth-token
+                hdr-error-mask
+                nil))
+  ([ctx
+    hdr-auth-token
+    hdr-error-mask
+    login-failed-reason-hdr]
    (cond
      *retry-after* (ring-response
                     {:status 503
@@ -859,4 +867,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                       {hdr-auth-token auth-token})
                                     (when-let [login-failed-reason (:login-failed-reason ctx)]
                                       {login-failed-reason-hdr login-failed-reason}))}
+                   {:cookies (merge {}
+                                    (when-let [auth-token (:auth-token ctx)]
+                                      {hdr-auth-token {:value auth-token
+                                                       :secure true}}))}
                    (when (:entity ctx) {:body (:entity ctx)}))))))

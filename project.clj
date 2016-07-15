@@ -18,7 +18,7 @@
                  [pe-jdbc-utils "0.0.21"]]
   :resource-paths ["resources"]
   :codox {:exclude [user]
-          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.41/"
+          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.42/"
           :src-linenum-anchor-prefix "L"}
   :profiles {:dev {:source-paths ["dev"]
                    :plugins [[cider/cider-nrepl "0.12.0"]]
