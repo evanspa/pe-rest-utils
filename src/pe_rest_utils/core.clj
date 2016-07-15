@@ -870,5 +870,6 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                    {:cookies (merge {}
                                     (when-let [auth-token (:auth-token ctx)]
                                       {hdr-auth-token {:value auth-token
-                                                       :secure true}}))}
+                                                       :secure true
+                                                       :path "/"}}))}
                    (when (:entity ctx) {:body (:entity ctx)}))))))
