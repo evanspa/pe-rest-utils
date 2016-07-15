@@ -871,5 +871,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                     (when-let [auth-token (:auth-token ctx)]
                                       {hdr-auth-token {:value auth-token
                                                        :secure true
+                                                       :path "/"}})
+                                    (when-let [_ (:logout ctx)]
+                                      {hdr-auth-token {:value ""
+                                                       :max-age 0
+                                                       :secure true
                                                        :path "/"}}))}
                    (when (:entity ctx) {:body (:entity ctx)}))))))
