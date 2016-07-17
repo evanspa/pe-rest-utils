@@ -871,7 +871,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                     (when-let [auth-token (:auth-token ctx)]
                                       {hdr-auth-token {:value auth-token
                                                        :secure true
-                                                       :path "/"}})
+                                                       :path "/"
+                                                       :max-age 2147483647}}) ;http://stackoverflow.com/a/22479460/1034895
                                     (when-let [_ (:logout ctx)]
                                       {hdr-auth-token {:value ""
                                                        :max-age 0
