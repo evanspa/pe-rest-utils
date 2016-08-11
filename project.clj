@@ -14,11 +14,11 @@
                  [org.slf4j/slf4j-api "1.7.5"]
                  [liberator "0.14.1"]
                  [environ "1.0.0"]
-                 [pe-core-utils "0.0.14"]
-                 [pe-jdbc-utils "0.0.21"]]
+                 [pe-core-utils "0.0.15"]
+                 [pe-jdbc-utils "0.0.22"]]
   :resource-paths ["resources"]
   :codox {:exclude [user]
-          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.45/"
+          :src-dir-uri "https://github.com/evanspa/pe-rest-utils/blob/0.0.46/"
           :src-linenum-anchor-prefix "L"}
   :profiles {:dev {:source-paths ["dev"]
                    :plugins [[cider/cider-nrepl "0.12.0"]]

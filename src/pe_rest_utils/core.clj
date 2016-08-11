@@ -347,7 +347,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                 entity-uri
                                                 saved-entity-entid))
                                saved-entity))
-            merge-embedded-fn (fn [saved-entity saved-entity-entid]
+            merge-embedded-fn (fn [saved-entity saved-entity-entid conn]
                                 (if embedded-resources-fn
                                   (assoc saved-entity
                                          :_embedded
@@ -355,7 +355,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                 base-url
                                                                 entity-uri-prefix
                                                                 entity-uri
-                                                                db-spec
+                                                                conn
                                                                 accept-format-ind
                                                                 saved-entity-entid))
                                   saved-entity))]
@@ -384,7 +384,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                             transformed-saved-entity (merge-links-fn transformed-saved-entity
                                                                      (last entids))]
                         (-> transformed-saved-entity
-                            (merge-embedded-fn (last entids))
+                            (merge-embedded-fn (last entids) conn)
                             (write-res accept-format-ind accept-charset))))]
               (try
                 (apply delete-entity-fn delete-entity-fn-args)
@@ -530,7 +530,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                     entity-uri
                                                     saved-entity-entid))
                                    saved-entity))
-                merge-embedded-fn (fn [saved-entity saved-entity-entid]
+                merge-embedded-fn (fn [saved-entity saved-entity-entid conn]
                                     (if embedded-resources-fn
                                       (assoc saved-entity
                                              :_embedded
@@ -538,7 +538,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                     base-url
                                                                     entity-uri-prefix
                                                                     entity-uri
-                                                                    db-spec
+                                                                    conn
                                                                     accept-format-ind
                                                                     saved-entity-entid))
                                       saved-entity))]
@@ -568,7 +568,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                     transformed-newly-saved-entity (merge-links-fn transformed-newly-saved-entity
                                                                                    new-entity-id)
                                     transformed-newly-saved-entity (merge-embedded-fn transformed-newly-saved-entity
-                                                                                      new-entity-id)]
+                                                                                      new-entity-id
+                                                                                      conn)]
                                 (-> {:status 201
                                      :location (make-abs-link-href base-url
                                                                    (str entity-uri
@@ -656,7 +657,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                           transformed-saved-entity (merge-links-fn transformed-saved-entity
                                                                                    (last entids))]
                                       (-> transformed-saved-entity
-                                          (merge-embedded-fn (last entids))
+                                          (merge-embedded-fn (last entids) conn)
                                           (write-res accept-format-ind accept-charset))))]
                             (try
                               (let [[_ saved-entity] (apply save-entity-fn save-entity-fn-args)]
@@ -693,6 +694,10 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                             ", entity-uri: " entity-uri
                             ", entids: " entids
                             ", if-unmodified-since-hdr: " if-unmodified-since-hdr ")"))
+          (when (instance? java.sql.SQLException e)
+            (let [next-exception (.getNextException e)]
+              (when (not (nil? next-exception))
+                (log/error next-exception "cause"))))
           (when err-notification-fn
             (err-notification-fn {:exception e
                                   :params [version
