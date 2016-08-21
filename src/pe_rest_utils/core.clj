@@ -554,7 +554,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                                      transformed-body-data))]
                           (try
                             (let [[_ newly-saved-entity] (apply save-new-entity-fn save-new-entity-fn-args)]
-                              (let [{{{est-session? hdr-establish-session} :headers} :request} ctx
+                              (let [{{{est-session-str hdr-establish-session} :headers} :request} ctx
                                     body-data-out-transform-fn-args (flatten (conj []
                                                                                    version
                                                                                    conn
@@ -579,7 +579,8 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                                         accept-format-ind
                                                         accept-charset)}
                                     (merge
-                                     (if est-session?
+                                     (if (and (not (nil? est-session-str))
+                                              (Boolean/parseBoolean est-session-str))
                                        (let [plaintext-token (make-session-fn version conn new-entity-id)]
                                          {:auth-token plaintext-token})
                                        (when (:auth-token ctx)
