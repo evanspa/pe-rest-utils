@@ -82,17 +82,24 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
      :format-ind
      :charset"
   [media-type]
-  (let [[_ type subtype _ version _ format-ind _ charset-name]
-        (first
-         (re-seq
-          #"(\w*)/([\w.]*)(-v(\d.\d.\d))?(\+(\w*))?(;charset=([\w-]*))?"
-          media-type))]
-    {:type type
-     :subtype subtype
-     :bare-mediatype (format "%s/%s" type subtype)
-     :version version
-     :format-ind format-ind
-     :charset charset-name}))
+  (if (= media-type "application/json") ; special case check (getting hacky)
+    {:type "application"
+     :subtype "json"
+     :bare-mediatype "application/json"
+     :version nil
+     :format-ind "json"
+     :charset "UTF-8"}
+    (let [[_ type subtype _ version _ format-ind _ charset-name]
+          (first
+           (re-seq
+            #"(\w*)/([\w.]*)(-v(\d.\d.\d))?(\+(\w*))?(;charset=([\w-]*))?"
+            media-type))]
+      {:type type
+       :subtype subtype
+       :bare-mediatype (format "%s/%s" type subtype)
+       :version version
+       :format-ind format-ind
+       :charset charset-name})))
 
 (defn is-known-content-type?
   "Returns a vector of 2 elements; the first indicates if the content-type
@@ -235,6 +242,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
           content-lang (get-in ctx [:request :headers "content-language"])
           parsed-content-type (parse-media-type content-type)
           content-type-charset-name (:charset parsed-content-type)
+          content-type-charset-name (if content-type-charset-name content-type-charset-name "UTF-8")
           version (:version parsed-content-type)
           body (get-in ctx [:request :body])
           accept-charset (get meta/char-sets accept-charset-name)
@@ -365,6 +373,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                 delete-reason (when delete-reason-str (Long/parseLong delete-reason-str))
                 if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
                 delete-entity-fn-args (flatten (conj []
+                                                     ctx
                                                      version
                                                      conn
                                                      entids
@@ -546,6 +555,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                       (j/with-db-transaction [conn db-spec]
                         (let [new-entity-id (next-entity-id-fn version conn)
                               save-new-entity-fn-args (flatten (conj []
+                                                                     ctx
                                                                      version
                                                                      conn
                                                                      entids
@@ -586,10 +596,12 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                        (when (:auth-token ctx)
                                          {:auth-token (:auth-token ctx)}))))))
                             (catch IllegalArgumentException e
+                              (j/db-set-rollback-only! conn)
                               (let [msg-mask (Long/parseLong (.getMessage e))]
                                 {:unprocessable-entity true
                                  :error-mask msg-mask}))
                             (catch clojure.lang.ExceptionInfo e
+                              (j/db-set-rollback-only! conn)
                               (let [cause (-> e ex-data :cause)]
                                 (if (= cause :became-unauthenticated)
                                   {:became-unauthenticated true}
@@ -598,6 +610,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                       (j/with-db-transaction [conn db-spec]
                         (try
                           (let [post-as-do-fn-args (flatten (conj []
+                                                                  ctx
                                                                   version
                                                                   conn
                                                                   entids
@@ -626,10 +639,12 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                    (when (:auth-token ctx)
                                      {:auth-token (:auth-token ctx)})))
                           (catch IllegalArgumentException e
+                            (j/db-set-rollback-only! conn)
                             (let [msg-mask (Long/parseLong (.getMessage e))]
                               {:unprocessable-entity true
                                :error-mask msg-mask}))
                           (catch clojure.lang.ExceptionInfo e
+                            (j/db-set-rollback-only! conn)
                             (let [cause (-> e ex-data :cause)]
                               (if (= cause :became-unauthenticated)
                                 {:became-unauthenticated true}
@@ -639,6 +654,7 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                         (let [if-unmodified-since-epoch-str (get-in ctx [:request :headers if-unmodified-since-hdr])
                               if-unmodified-since-val (when if-unmodified-since-epoch-str (c/from-long (Long/parseLong if-unmodified-since-epoch-str)))
                               save-entity-fn-args (flatten (conj []
+                                                                 ctx
                                                                  version
                                                                  conn
                                                                  entids
@@ -668,10 +684,12 @@ constructed from pe-rest-utils.meta/mt-type and mt-subtype."
                                        (when (:auth-token ctx)
                                          {:auth-token (:auth-token ctx)})))
                               (catch IllegalArgumentException e
+                                (j/db-set-rollback-only! conn)
                                 (let [msg-mask (Long/parseLong (.getMessage e))]
                                   {:unprocessable-entity true
                                    :error-mask msg-mask}))
                               (catch clojure.lang.ExceptionInfo e
+                                (j/db-set-rollback-only! conn)
                                 (let [cause (-> e ex-data :cause)
                                       latest-entity (-> e ex-data :latest-entity)]
                                   (if (= cause :became-unauthenticated)
